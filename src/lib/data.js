@@ -22,6 +22,9 @@
 
 import league from "../data/league.json";
 import players from "../data/players.json";
+import chatStatsData from "../data/chat-stats.json";
+
+export const chatStats = chatStatsData;
 
 export const meta = league.meta;
 export const managers = league.managers;

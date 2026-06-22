@@ -8,6 +8,7 @@
     "fetch": "node scripts/fetch-data.mjs",
     "compute": "node scripts/compute.mjs",
     "data": "node scripts/fetch-data.mjs && node scripts/fetch-values.mjs && node scripts/compute.mjs",
+    "chat": "node scripts/fetch-chat.mjs && node scripts/compute-chat.mjs",
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview"

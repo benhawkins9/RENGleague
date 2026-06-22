@@ -1,0 +1,113 @@
+---
+import Base from "../layouts/Base.astro";
+import PageHeader from "../components/PageHeader.astro";
+import StatCard from "../components/StatCard.astro";
+import RankBars from "../components/RankBars.astro";
+import ManagerChip from "../components/ManagerChip.astro";
+import { chatStats, getManager, managerName, managerColor, fmt } from "../lib/data.js";
+
+const C = chatStats;
+const label = (id, name) => (getManager(id) ? managerName(id) : name);
+const color = (id) => (getManager(id) ? managerColor(id) : "var(--muted)");
+
+const yapperBars = C.yappers.map((y) => ({
+  name: label(y.managerId, y.name), value: y.count, valueLabel: `${y.count}`,
+  color: color(y.managerId), href: getManager(y.managerId) ? `/managers/${y.managerId}` : undefined,
+  sub: `avg ${y.avgLen} chars/msg`,
+}));
+const topYapper = C.yappers[0];
+
+const maxN = C.words[0]?.n || 1, minN = C.words[C.words.length - 1]?.n || 1;
+const sz = (n) => { const s = Math.sqrt(n), smin = Math.sqrt(minN), smax = Math.sqrt(maxN); return Math.round(14 + (smax === smin ? 0 : (s - smin) / (smax - smin)) * 34); };
+const wpal = ["#2ee6a6", "#54a6ff", "#ffcf4a", "#ff5d6c", "#a98bff", "#ff9f45", "#4dd9c0", "#f777b0"];
+
+const emojiMap = { happy: "😄", like: "👍", heart: "❤️", sad: "😢", fire: "🔥", shock: "😮", eyes: "👀", thinking: "🤔", goat: "🐐", poop: "💩", angry: "😡", laugh: "😂", meme_success_kid: "✊", meme_patrick_looking_down: "👀", meme_side_eye: "😒" };
+const reactSorted = Object.entries(C.reactTypes).sort((a, b) => b[1] - a[1]);
+const topReact = reactSorted[0];
+const seasonsOrder = Object.keys(C.bySeason).sort();
+const maxSeason = Math.max(...Object.values(C.bySeason), 1);
+---
+
+<Base active="chat" title="Chat Lab" description="The RENG group chat, mined: word clouds, biggest yappers, and the most-reacted hits.">
+  <PageHeader eyebrow="The group chat" title="Chat Lab"
+    sub={`${fmt(C.totalMessages)} messages of trash talk, receipts and degeneracy — run through the blender. Word clouds, the loudest yappers, and the most-reacted hits.`} />
+
+  <section class="section-sm">
+    <div class="wrap">
+      <div class="grid cols-3" style="margin-bottom:20px">
+        <StatCard label="Messages mined" value={fmt(C.totalMessages)} accent="accent" icon="💬" sub="real chatter (system msgs excluded)" />
+        <StatCard label="Biggest Yapper" value={topYapper.count} accent="purple" icon="🗣️" sub={`${label(topYapper.managerId, topYapper.name)} — never stops typing`} />
+        <StatCard label="Go-to reaction" value={emojiMap[topReact?.[0]] || "👍"} accent="gold" icon="❤️" sub={`${topReact?.[0]} · used ${topReact?.[1]}×`} />
+      </div>
+
+      <!-- word cloud -->
+      <div class="panel panel-pad" style="margin-bottom:20px">
+        <h3 style="font-size:16px;margin-bottom:4px">☁️ Word Cloud</h3>
+        <p class="dim" style="font-size:12px;margin:0 0 16px">The league's most-used words (filler & stop-words stripped). Bigger = more often.</p>
+        <div class="cloud">
+          {C.words.map((w, i) => (<span class="cw" style={`font-size:${sz(w.n)}px;color:${wpal[i % wpal.length]}`} title={`${w.n}×`}>{w.w}</span>))}
+        </div>
+      </div>
+
+      <div class="grid cols-2" style="align-items:start">
+        <div class="panel panel-pad">
+          <h3 style="font-size:16px;margin-bottom:4px">🗣️ Biggest Yappers</h3>
+          <p class="dim" style="font-size:12px;margin:0 0 16px">Messages sent. {label(topYapper.managerId, topYapper.name)} is in a league of their own.</p>
+          <RankBars items={yapperBars} />
+        </div>
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div class="panel panel-pad">
+            <h3 style="font-size:16px;margin-bottom:14px">😂 Reactions Used</h3>
+            {reactSorted.slice(0, 8).map(([k, n]) => (
+              <div class="rx-row"><span class="rx-emoji">{emojiMap[k] || "•"}</span><span class="rx-name dim">{k.replace(/^meme_/, "").replace(/_/g, " ")}</span><span class="rx-track"><span style={`width:${(n / reactSorted[0][1]) * 100}%`}></span></span><span class="num rx-n">{n}</span></div>
+            ))}
+          </div>
+          <div class="panel panel-pad">
+            <h3 style="font-size:16px;margin-bottom:14px">📅 Chatter by Season</h3>
+            {seasonsOrder.map((s) => (
+              <div class="rx-row"><span class="num" style="width:42px;font-weight:600">{s}</span><span class="rx-track"><span style={`width:${(C.bySeason[s] / maxSeason) * 100}%;background:var(--accent-2)`}></span></span><span class="num rx-n">{C.bySeason[s]}</span></div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- quote wall -->
+  <section class="section-sm" style="padding-bottom:40px">
+    <div class="wrap">
+      <div class="eyebrow">Immortalized</div>
+      <h2 class="section-title" style="font-size:clamp(20px,3vw,26px);margin-bottom:14px">🖼️ The Quote Wall</h2>
+      <p class="section-sub" style="margin-bottom:16px">The most-reacted messages in league history. The hits.</p>
+      <div class="grid cols-2 quotes">
+        {C.quotes.map((q) => (
+          <div class="quote" style={`--c:${color(q.managerId)}`}>
+            <div class="q-text">“{q.text}”</div>
+            <div class="q-foot">
+              <ManagerChip id={q.managerId} name={label(q.managerId, q.name)} size={24} link={false} />
+              <span class="q-react num">{Object.entries(q.breakdown).map(([k, n]) => `${emojiMap[k] || "•"}${n}`).join(" ")}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <p class="dim" style="font-size:11.5px;margin-top:18px">Pulled from the Sleeper league chat. Only aggregates + these top-reacted lines are published — the full log stays private.</p>
+    </div>
+  </section>
+
+  <style>
+    .cloud { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; justify-content: center; line-height: 1.15; padding: 8px 0; }
+    .cw { font-family: var(--display); font-weight: 700; cursor: default; transition: transform .12s; }
+    .cw:hover { transform: scale(1.12); }
+    .rx-row { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 10px; padding: 5px 0; }
+    .rx-emoji { font-size: 18px; width: 22px; }
+    .rx-name { font-size: 12px; text-transform: capitalize; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90px; }
+    .rx-track { height: 8px; background: var(--panel-3); border-radius: 999px; overflow: hidden; min-width: 40px; }
+    .rx-track span { display: block; height: 100%; background: var(--gold); border-radius: 999px; }
+    .rx-n { font-weight: 700; font-size: 13px; width: 34px; text-align: right; }
+    .quotes { gap: 14px; }
+    .quote { background: linear-gradient(180deg, var(--panel), var(--bg-2)); border: 1px solid var(--line); border-left: 3px solid var(--c); border-radius: var(--radius); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+    .q-text { font-size: 15.5px; line-height: 1.45; font-family: var(--display); }
+    .q-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid var(--line); padding-top: 11px; }
+    .q-react { font-size: 13px; letter-spacing: .02em; }
+  </style>
+</Base>

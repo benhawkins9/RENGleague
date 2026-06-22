@@ -3,6 +3,9 @@ dist/
 .astro/
 # Raw API dumps are large + re-fetchable; keep them out of git.
 data/raw/
+# SENSITIVE — never commit: Sleeper auth token + raw private league chat
+.sleeper-token
+data/chat/
 *.log
 .DS_Store
 .vercel
