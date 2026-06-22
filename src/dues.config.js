@@ -9,5 +9,5 @@ export const dues = {
   collector: "Ben", //  who's collecting
 
   venmo: "hawkman", //  Venmo username WITHOUT the @
-  cashapp: "", //  Cash App $cashtag WITHOUT the $  — add to enable Cash App
+  cashapp: "henbawkins", //  Cash App $cashtag WITHOUT the $
 };
