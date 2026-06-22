@@ -1,0 +1,6 @@
+# Keep CLI deploy uploads lean — Vercel builds from committed src/data, not raw dumps.
+node_modules
+dist
+.astro
+data/raw
+*.log
