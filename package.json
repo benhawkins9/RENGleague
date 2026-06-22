@@ -7,7 +7,7 @@
   "scripts": {
     "fetch": "node scripts/fetch-data.mjs",
     "compute": "node scripts/compute.mjs",
-    "data": "node scripts/fetch-data.mjs && node scripts/compute.mjs",
+    "data": "node scripts/fetch-data.mjs && node scripts/fetch-values.mjs && node scripts/compute.mjs",
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview"

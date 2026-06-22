@@ -1,0 +1,133 @@
+---
+import Base from "../layouts/Base.astro";
+import PageHeader from "../components/PageHeader.astro";
+import StatCard from "../components/StatCard.astro";
+import RankBars from "../components/RankBars.astro";
+import ManagerChip from "../components/ManagerChip.astro";
+import { dynasty, managerName, managerColor } from "../lib/data.js";
+
+const D = dynasty;
+const teams = D.teams;
+const fmtV = (v) => (v / 1000).toFixed(1) + "k";
+
+const valueBars = teams.map((t) => ({
+  name: managerName(t.managerId), value: t.totalValue, valueLabel: fmtV(t.totalValue),
+  color: managerColor(t.managerId), href: `/managers/${t.managerId}`,
+  sub: `avg age ${t.avgAge} · ${t.topPlayers[0]?.name}`,
+}));
+const topRoster = teams[0];
+const topAsset = D.topAssets[0];
+const topRiser = D.risers[0];
+
+// ---- contender / rebuilder scatter ----
+const ages = teams.map((t) => t.avgAge);
+const vals = teams.map((t) => t.totalValue);
+const aMin = Math.min(...ages) - 0.4, aMax = Math.max(...ages) + 0.4;
+const vMin = Math.min(...vals) * 0.96, vMax = Math.max(...vals) * 1.04;
+const med = (arr) => [...arr].sort((a, b) => a - b)[Math.floor(arr.length / 2)];
+const medAge = med(ages), medVal = med(vals);
+const W = 820, H = 470, padL = 58, padR = 24, padT = 30, padB = 48;
+const xAt = (age) => padL + ((age - aMin) / (aMax - aMin)) * (W - padL - padR);
+const yAt = (val) => padT + (1 - (val - vMin) / (vMax - vMin)) * (H - padT - padB);
+const dateNice = new Date(D.date + "T00:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+---
+
+<Base active="dynasty" title="Dynasty Values" description="Dynasty roster values, power rankings, and contender-vs-rebuilder windows, powered by FantasyCalc.">
+  <PageHeader eyebrow="Roster value · live market" title="Dynasty Values"
+    sub={`Whose roster is actually worth the most right now — by dynasty trade value. Powered by FantasyCalc (Superflex 0.5 PPR), as of ${dateNice}.`} />
+
+  <section class="section-sm">
+    <div class="wrap">
+      <div class="grid cols-3" style="margin-bottom:22px">
+        <StatCard label="Most valuable roster" value={fmtV(topRoster.totalValue)} accent="accent" icon="👑" sub={managerName(topRoster.managerId)} />
+        <StatCard label="Top asset in the league" value={fmtV(topAsset.value)} accent="gold" icon="💎" sub={`${topAsset.name} · ${managerName(topAsset.managerId)}`} />
+        <StatCard label="Biggest 30-day riser" value={`+${topRiser.trend30}`} accent="blue" icon="📈" sub={`${topRiser.name} · ${managerName(topRiser.managerId)}`} />
+      </div>
+
+      <div class="panel panel-pad" style="margin-bottom:20px">
+        <h3 style="font-size:17px;margin-bottom:4px">🏆 Dynasty Power Rankings</h3>
+        <p class="dim" style="font-size:12.5px;margin:0 0 16px">Total roster value (sum of every player's dynasty trade value). The truest measure of who's loaded — independent of past results.</p>
+        <RankBars items={valueBars} />
+      </div>
+    </div>
+  </section>
+
+  <!-- contender / rebuilder scatter -->
+  <section class="section-sm">
+    <div class="wrap">
+      <div class="eyebrow">Windows</div>
+      <h2 class="section-title" style="font-size:clamp(20px,3vw,26px);margin-bottom:4px">⏳ Contend or Rebuild</h2>
+      <p class="section-sub" style="margin-bottom:16px">Roster value vs. average age (value-weighted). Top-right = win-now; top-left = young & loaded; bottom = thin.</p>
+      <div class="panel panel-pad">
+        <div style="overflow-x:auto">
+          <svg viewBox={`0 0 ${W} ${H}`} class="scatter" style="min-width:640px;width:100%;height:auto">
+            <line x1={xAt(medAge)} y1={padT} x2={xAt(medAge)} y2={H - padB} stroke="rgba(255,255,255,.08)" stroke-dasharray="4 4" />
+            <line x1={padL} y1={yAt(medVal)} x2={W - padR} y2={yAt(medVal)} stroke="rgba(255,255,255,.08)" stroke-dasharray="4 4" />
+            <text x={padL + 6} y={padT + 16} fill="var(--faint)" font-size="12" class="num">YOUNG &amp; LOADED</text>
+            <text x={W - padR - 6} y={padT + 16} fill="var(--faint)" font-size="12" text-anchor="end" class="num">WIN-NOW</text>
+            <text x={padL + 6} y={H - padB - 8} fill="var(--faint)" font-size="12" class="num">REBUILDING</text>
+            <text x={W - padR - 6} y={H - padB - 8} fill="var(--faint)" font-size="12" text-anchor="end" class="num">AGING OUT</text>
+            <text x={W / 2} y={H - 12} fill="var(--muted)" font-size="12.5" text-anchor="middle" class="num">◀ younger · avg roster age · older ▶</text>
+            <text x={16} y={H / 2} fill="var(--muted)" font-size="12.5" text-anchor="middle" transform={`rotate(-90 16 ${H / 2})`} class="num">roster value ▶</text>
+            {teams.map((t) => (
+              <g class="dot">
+                <circle cx={xAt(t.avgAge)} cy={yAt(t.totalValue)} r="7" fill={managerColor(t.managerId)} stroke="var(--bg)" stroke-width="2" />
+                <text x={xAt(t.avgAge) + 11} y={yAt(t.totalValue) + 4} fill={managerColor(t.managerId)} font-size="11.5" style="font-weight:600">{managerName(t.managerId).length > 14 ? managerName(t.managerId).slice(0, 13) + "…" : managerName(t.managerId)}</text>
+              </g>
+            ))}
+          </svg>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- top assets + risers/fallers -->
+  <section class="section-sm" style="padding-bottom:40px">
+    <div class="wrap grid cols-2" style="align-items:start">
+      <div class="panel panel-pad">
+        <h3 style="font-size:16px;margin-bottom:14px">💎 Most Valuable Assets</h3>
+        {D.topAssets.map((p, i) => (
+          <div class="dv-row">
+            <span class="num dv-idx">{i + 1}</span>
+            <span class="dv-name"><b>{p.name}</b> {p.pos && <span class={`tag-pos pos-${p.pos}`}>{p.pos}</span>}</span>
+            <span class="dim dv-own">{managerName(p.managerId)}</span>
+            <span class="num dv-val">{fmtV(p.value)}</span>
+          </div>
+        ))}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <div class="panel panel-pad">
+          <h3 style="font-size:16px;margin-bottom:4px">📈 30-Day Risers</h3>
+          <p class="dim" style="font-size:11.5px;margin:0 0 12px">Rostered players gaining the most value</p>
+          {D.risers.slice(0, 6).map((p) => (
+            <div class="tr-row"><span class="tr-name"><b>{p.name}</b> {p.pos && <span class={`tag-pos pos-${p.pos}`}>{p.pos}</span>}</span><span class="dim" style="font-size:11.5px">{managerName(p.managerId)}</span><span class="num pos">+{p.trend30}</span></div>
+          ))}
+        </div>
+        <div class="panel panel-pad">
+          <h3 style="font-size:16px;margin-bottom:4px">📉 30-Day Fallers</h3>
+          <p class="dim" style="font-size:11.5px;margin:0 0 12px">Cooling off — sell-high or buy-low candidates</p>
+          {D.fallers.slice(0, 6).map((p) => (
+            <div class="tr-row"><span class="tr-name"><b>{p.name}</b> {p.pos && <span class={`tag-pos pos-${p.pos}`}>{p.pos}</span>}</span><span class="dim" style="font-size:11.5px">{managerName(p.managerId)}</span><span class="num neg">{p.trend30}</span></div>
+          ))}
+        </div>
+      </div>
+    </div>
+    <div class="wrap"><p class="dim" style="font-size:11.5px;margin-top:18px">Values are live dynasty trade values from <a href="https://fantasycalc.com" target="_blank" rel="noopener" style="color:var(--accent)">FantasyCalc</a> (Superflex · 0.5 PPR · 12-team), refreshed weekly.</p></div>
+  </section>
+
+  <style>
+    .scatter text { font-family: var(--display); }
+    .dot text { paint-order: stroke; }
+    .dv-row { display: grid; grid-template-columns: 18px 1fr auto auto; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+    .dv-row:last-child { border: none; }
+    .dv-idx { color: var(--faint); font-weight: 700; font-size: 12px; }
+    .dv-name { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dv-own { font-size: 11.5px; white-space: nowrap; }
+    .dv-val { font-weight: 700; font-size: 14px; color: var(--accent); }
+    .tr-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+    .tr-row:last-child { border: none; }
+    .tr-name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tr-row .num { font-weight: 700; font-size: 13px; width: 48px; text-align: right; }
+    @media (max-width: 560px) { .dv-row { grid-template-columns: 16px 1fr auto; } .dv-own { display: none; } }
+  </style>
+</Base>

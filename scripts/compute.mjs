@@ -2,7 +2,7 @@
 // This league uses a custom VICTORY POINTS system (computed manually off-platform),
 // so we reconstruct it here: VP standings over a 14-week regular season, then a
 // play-in week + 2-week cumulative-score finals to crown the real champion.
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,6 +20,11 @@ const read = (...p) => JSON.parse(readFileSync(join(RAW, ...p), "utf8"));
 const manifest = read("_manifest.json");
 const state = read("state.json");
 const players = read("players.json");
+// FantasyCalc dynasty values (optional — only present after `fetch-values`)
+let valueData = null;
+const valuesPath = join(OUT, "values-current.json");
+if (existsSync(valuesPath)) valueData = JSON.parse(readFileSync(valuesPath, "utf8"));
+const PV = valueData?.values || {}; // sleeperId -> { value, age, position, name, trend30, ... }
 const SEASONS = manifest.fetchedSeasons.map((s) => s.season).sort();
 const referencedPlayers = new Set();
 
@@ -456,8 +461,10 @@ const faabRecords = {
 // ---- Trades ----
 for (const t of allTrades) {
   t.date = t.created ? new Date(t.created).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null;
-  for (const s of t.sides)
-    s.playerNames = s.players.map((pid) => ({ id: pid, name: players[pid]?.name || pid, pos: players[pid]?.pos || null }));
+  for (const s of t.sides) {
+    s.playerNames = s.players.map((pid) => ({ id: pid, name: players[pid]?.name || pid, pos: players[pid]?.pos || null, value: PV[pid]?.value || 0 }));
+    s.valueToday = s.players.reduce((a, pid) => a + (PV[pid]?.value || 0), 0);
+  }
 }
 const trades = [...allTrades].sort((a, b) => (b.created || 0) - (a.created || 0));
 
@@ -526,6 +533,26 @@ for (const [mid, pids] of Object.entries(currentRosters)) {
   acquisition[mid] = { breakdown, players: list };
 }
 
+// ---- Dynasty roster values (FantasyCalc, today) ----
+let dynasty = null;
+if (valueData && Object.keys(currentRosters).length) {
+  const teams = Object.entries(currentRosters).map(([mid, pids]) => {
+    const valued = pids.map((pid) => ({ id: pid, name: PV[pid]?.name || players[pid]?.name || pid, pos: PV[pid]?.position || players[pid]?.pos || null, value: PV[pid]?.value || 0, age: PV[pid]?.age ?? null, trend30: PV[pid]?.trend30 || 0 })).sort((a, b) => b.value - a.value);
+    const total = valued.reduce((a, p) => a + p.value, 0);
+    const vSum = total || 1;
+    const wAge = valued.reduce((a, p) => a + (p.age || 0) * (p.value || 0), 0) / vSum;
+    return { managerId: mid, totalValue: total, avgAge: round(wAge, 1), qbValue: valued.filter((p) => p.pos === "QB").reduce((a, p) => a + p.value, 0), topPlayers: valued.slice(0, 6), players: valued };
+  }).sort((a, b) => b.totalValue - a.totalValue).map((t, i) => ({ ...t, rank: i + 1 }));
+  const allValued = [];
+  for (const t of teams) for (const p of t.players) if (p.value) allValued.push({ ...p, managerId: t.managerId });
+  dynasty = {
+    date: valueData.date, source: valueData.source, teams,
+    risers: [...allValued].sort((a, b) => b.trend30 - a.trend30).slice(0, 8),
+    fallers: [...allValued].sort((a, b) => a.trend30 - b.trend30).slice(0, 8),
+    topAssets: [...allValued].sort((a, b) => b.value - a.value).slice(0, 12),
+  };
+}
+
 // ---- Auction (startup) records ----
 let auctionRecords = null;
 const auctionSeason = SEASONS.find((s) => seasonsOut[s].draftType === "auction");
@@ -566,7 +593,7 @@ const league = {
   managers: managerList,
   seasons: seasonsOut,
   allTime: { standings: managerList.filter((m) => m.allTime.seasons > 0).sort((a, b) => b.allTime.titles - a.allTime.titles || b.allTime.winPct - a.allTime.winPct || b.allTime.pf - a.allTime.pf) },
-  headToHead: h2hList, records, vpRecords, faabRecords, auctionRecords, trades, tradeAnalytics, acquisition, draft: draftAnalysis, topPlayerSeasons,
+  headToHead: h2hList, records, vpRecords, faabRecords, auctionRecords, trades, tradeAnalytics, acquisition, dynasty, draft: draftAnalysis, topPlayerSeasons,
 };
 
 writeFileSync(join(OUT, "league.json"), JSON.stringify(league));

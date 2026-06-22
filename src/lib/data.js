@@ -37,6 +37,7 @@ export const auctionRecords = league.auctionRecords;
 export const trades = league.trades;
 export const tradeAnalytics = league.tradeAnalytics;
 export const acquisition = league.acquisition;
+export const dynasty = league.dynasty;
 export const draft = league.draft;
 export const topPlayerSeasons = league.topPlayerSeasons;
 
