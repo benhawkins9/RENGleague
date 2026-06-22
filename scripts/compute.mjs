@@ -575,6 +575,32 @@ const topPlayerSeasons = playerSeasonsFlat.sort((a, b) => b.points - a.points).s
 const playersOut = {};
 for (const id of referencedPlayers) if (players[id]) playersOut[id] = players[id];
 
+// ---- The Awards Show (per-season superlatives) ----
+const awards = {};
+for (const s of SEASONS.filter((x) => seasonsOut[x].isComplete)) {
+  const so = seasonsOut[s];
+  const st = so.standings;
+  const byLuck = [...st].sort((a, b) => b.luck - a.luck);
+  const byEffLow = [...st].sort((a, b) => a.efficiency - b.efficiency);
+  const highWeek = st.map((r) => ({ managerId: r.managerId, teamName: r.teamName, pts: r.highWeek?.pts || 0, week: r.highWeek?.week })).sort((a, b) => b.pts - a.pts)[0];
+  const splurge = allWaiverAdds.filter((w) => w.season === s).sort((a, b) => b.faab - a.faab)[0];
+  const seasonTrades = allTrades.filter((t) => t.season === s).map((t) => ({ t, assets: t.sides.reduce((a, sd) => a + sd.players.length + sd.picks.length, 0) })).sort((a, b) => b.assets - a.assets);
+  const tradeCounts = {};
+  allTrades.filter((t) => t.season === s).forEach((t) => t.sides.forEach((sd) => { if (sd.managerId) tradeCounts[sd.managerId] = (tradeCounts[sd.managerId] || 0) + 1; }));
+  const wheeler = Object.entries(tradeCounts).sort((a, b) => b[1] - a[1])[0];
+  const heist = so.draftType === "auction" ? auctionRecords?.bestValues?.[0] : draftAnalysis.bestByYear?.[s]?.[0];
+  awards[s] = {
+    champion: so.champion, runnerUp: so.runnerUp, pointsKing: so.pointsKing,
+    choker: st.find((r) => r.managerId !== so.champion?.managerId) || null,
+    luckiest: byLuck[0], snakebit: byLuck[byLuck.length - 1],
+    benchWarmer: byEffLow[0], lvp: st[st.length - 1], highWeek,
+    faabSplurge: splurge ? { managerId: splurge.managerId, name: splurge.name, pos: splurge.pos, faab: splurge.faab } : null,
+    tradeOfYear: seasonTrades[0] ? { ...seasonTrades[0].t, assets: seasonTrades[0].assets } : null,
+    wheeler: wheeler ? { managerId: wheeler[0], trades: wheeler[1] } : null,
+    heist: heist ? { name: heist.name, pos: heist.pos, managerId: heist.managerId, value: heist.amount ? `$${heist.amount}` : null, careerPoints: heist.careerPoints } : null,
+  };
+}
+
 const league = {
   meta: {
     name: manifest.fetchedSeasons[0].name,
@@ -593,7 +619,7 @@ const league = {
   managers: managerList,
   seasons: seasonsOut,
   allTime: { standings: managerList.filter((m) => m.allTime.seasons > 0).sort((a, b) => b.allTime.titles - a.allTime.titles || b.allTime.winPct - a.allTime.winPct || b.allTime.pf - a.allTime.pf) },
-  headToHead: h2hList, records, vpRecords, faabRecords, auctionRecords, trades, tradeAnalytics, acquisition, dynasty, draft: draftAnalysis, topPlayerSeasons,
+  headToHead: h2hList, records, vpRecords, faabRecords, auctionRecords, trades, tradeAnalytics, acquisition, dynasty, awards, draft: draftAnalysis, topPlayerSeasons,
 };
 
 writeFileSync(join(OUT, "league.json"), JSON.stringify(league));

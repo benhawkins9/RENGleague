@@ -1,0 +1,114 @@
+---
+import Base from "../layouts/Base.astro";
+import PageHeader from "../components/PageHeader.astro";
+import ManagerChip from "../components/ManagerChip.astro";
+import { awards, completedSeasons, managerName, fmt, signed } from "../lib/data.js";
+
+const order = [...completedSeasons].reverse();
+const def = order[0];
+
+function managerAwards(a) {
+  return [
+    { e: "🏆", t: "Champion", ac: "gold", mid: a.champion?.managerId, st: `${fmt(a.champion?.total)} finals pts`, d: "Won the 2-week final" },
+    { e: "😱", t: "The Choker", ac: "hot", mid: a.choker?.managerId, st: `#${a.choker?.seed} seed · no ring`, d: "Top VP team, no title" },
+    { e: "📈", t: "Points King", ac: "accent", mid: a.pointsKing?.managerId, st: `${fmt(a.pointsKing?.pf)} PF`, d: "Most points scored" },
+    { e: "🍀", t: "Lucky Duck", ac: "purple", mid: a.luckiest?.managerId, st: `${signed(a.luckiest?.luck)} luck`, d: "Won more than deserved" },
+    { e: "🐍", t: "Snakebit", ac: "blue", mid: a.snakebit?.managerId, st: `${signed(a.snakebit?.luck)} luck`, d: "Robbed by the schedule" },
+    { e: "🪑", t: "Bench Warmer", ac: "orange", mid: a.benchWarmer?.managerId, st: `${a.benchWarmer?.efficiency}% efficiency`, d: "Most points left benched" },
+    { e: "🔥", t: "Biggest Week", ac: "accent", mid: a.highWeek?.managerId, st: `${fmt(a.highWeek?.pts)} · Wk ${a.highWeek?.week}`, d: "Highest single-week score" },
+    { e: "📞", t: "Wheeler-Dealer", ac: "purple", mid: a.wheeler?.managerId, st: `${a.wheeler?.trades || 0} trades`, d: "Most active trader" },
+    { e: "💩", t: "The LVP", ac: "hot", mid: a.lvp?.managerId, st: "last in VP", d: "Wooden spoon" },
+  ].filter((c) => c.mid);
+}
+---
+
+<Base active="awards" title="Awards" description="The RENG Awards Show — auto-generated season superlatives.">
+  <PageHeader eyebrow="Season superlatives" title="The Awards Show"
+    sub="The hardware nobody asks for. Every season's heroes, chokers, and group-chat legends — auto-tallied from the data.">
+    <div class="season-tabs" role="tablist">
+      {order.map((s) => (<button class={`stab${s === def ? " is-active" : ""}`} data-season={s}>{s}</button>))}
+    </div>
+  </PageHeader>
+
+  {order.map((s) => {
+    const a = awards[s];
+    return (
+      <section class="award-panel" data-season={s} style={s === def ? "" : "display:none"}>
+        <div class="wrap">
+          <div class="grid cols-3 awards-grid">
+            {managerAwards(a).map((c) => (
+              <div class="award" style={`--a:var(--${c.ac})`}>
+                <div class="aw-top"><span class="aw-emoji">{c.e}</span><span class="aw-title">{c.t}</span></div>
+                <ManagerChip id={c.mid} size={30} />
+                <div class="aw-stat num">{c.st}</div>
+                <div class="aw-desc">{c.d}</div>
+              </div>
+            ))}
+          </div>
+
+          <h3 style="font-size:14px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:24px 0 12px">Players & Moves</h3>
+          <div class="grid cols-3">
+            {a.faabSplurge && (
+              <div class="award" style="--a:var(--orange)">
+                <div class="aw-top"><span class="aw-emoji">🤡</span><span class="aw-title">The Splurge</span></div>
+                <div class="aw-player"><b>{a.faabSplurge.name}</b> {a.faabSplurge.pos && <span class={`tag-pos pos-${a.faabSplurge.pos}`}>{a.faabSplurge.pos}</span>}</div>
+                <div class="aw-stat num" style="color:var(--orange)">${a.faabSplurge.faab} FAAB</div>
+                <div class="aw-desc">Wildest winning waiver bid · {managerName(a.faabSplurge.managerId)}</div>
+              </div>
+            )}
+            {a.heist && (
+              <div class="award" style="--a:var(--accent)">
+                <div class="aw-top"><span class="aw-emoji">💎</span><span class="aw-title">Draft Heist</span></div>
+                <div class="aw-player"><b>{a.heist.name}</b> {a.heist.pos && <span class={`tag-pos pos-${a.heist.pos}`}>{a.heist.pos}</span>}</div>
+                <div class="aw-stat num" style="color:var(--accent)">{a.heist.value || `${fmt(a.heist.careerPoints)} pts`}</div>
+                <div class="aw-desc">Best value pick · {managerName(a.heist.managerId)}</div>
+              </div>
+            )}
+            {a.tradeOfYear && (
+              <a href="/trades" class="award" style="--a:var(--accent-2)">
+                <div class="aw-top"><span class="aw-emoji">🔄</span><span class="aw-title">Trade of the Year</span></div>
+                <div class="aw-player">{a.tradeOfYear.sides.map((sd) => managerName(sd.managerId)).join(" ⇄ ")}</div>
+                <div class="aw-stat num" style="color:var(--accent-2)">{a.tradeOfYear.assets} assets</div>
+                <div class="aw-desc">Biggest blockbuster · Wk {a.tradeOfYear.week} → see the deal</div>
+              </a>
+            )}
+          </div>
+        </div>
+      </section>
+    );
+  })}
+
+  <script is:inline>
+    const tabs = document.querySelectorAll(".stab");
+    const panels = document.querySelectorAll(".award-panel");
+    tabs.forEach((t) => t.addEventListener("click", () => {
+      const s = t.dataset.season;
+      tabs.forEach((x) => x.classList.toggle("is-active", x === t));
+      panels.forEach((p) => (p.style.display = p.dataset.season === s ? "" : "none"));
+    }));
+  </script>
+
+  <style>
+    .season-tabs { display: flex; gap: 6px; margin-top: 18px; flex-wrap: wrap; }
+    .stab { font-family: var(--display); font-weight: 600; font-size: 15px; padding: 7px 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); cursor: pointer; transition: all .15s; }
+    .stab:hover { color: var(--text); }
+    .stab.is-active { background: var(--accent); color: #04221a; border-color: transparent; }
+    .award-panel { padding: 8px 0 40px; }
+    .awards-grid { gap: 16px; }
+    .award {
+      display: flex; flex-direction: column; gap: 10px; padding: 18px;
+      background: linear-gradient(180deg, var(--panel), var(--bg-2));
+      border: 1px solid var(--line); border-radius: var(--radius);
+      position: relative; overflow: hidden;
+    }
+    .award::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--a); }
+    a.award { transition: transform .14s, border-color .14s; }
+    a.award:hover { transform: translateY(-2px); border-color: var(--a); }
+    .aw-top { display: flex; align-items: center; gap: 9px; }
+    .aw-emoji { font-size: 24px; }
+    .aw-title { font-family: var(--display); font-weight: 700; font-size: 15px; color: var(--a); }
+    .aw-player { font-size: 15px; font-family: var(--display); font-weight: 600; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+    .aw-stat { font-size: 17px; font-weight: 700; }
+    .aw-desc { font-size: 12px; color: var(--muted); line-height: 1.4; }
+  </style>
+</Base>
