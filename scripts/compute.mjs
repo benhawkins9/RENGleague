@@ -69,7 +69,9 @@ const h2h = {};
 const playerSeasonPoints = {};
 const allWaiverAdds = [];   // {season, managerId, playerId, faab, week} for FAAB records
 const txByManager = {};     // managerId -> {faabSpent, waiverClaims, faAdds, biggestBid, trades}
-const allTrades = [];       // {season, week, created, sides:[{managerId, players, picks, faab}]}
+const allTrades = [];       // {season, week, created, sides:[{managerId, players, picks, faab, ...Out}]}
+const faEvents = [];        // {managerId, playerId, season, week} free-agent adds, for acquisition source
+const currentRosters = {};  // managerId -> [playerId] for the latest season
 
 const pairKey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 
@@ -89,6 +91,7 @@ for (const season of SEASONS) {
     touchManager(r.owner_id, userById[r.owner_id], season);
     (r.players || []).forEach((p) => referencedPlayers.add(p));
   }
+  if (season === SEASONS[SEASONS.length - 1]) for (const r of rosters) if (r.owner_id) currentRosters[r.owner_id] = r.players || [];
 
   const slots = startingSlots(league.roster_positions || []);
   const allWeeks = Object.keys(matchups).map(Number).sort((a, b) => a - b)
@@ -287,9 +290,12 @@ for (const season of SEASONS) {
         const picksIn = (tx.draft_picks || [])
           .filter((dp) => dp.owner_id === rid && dp.previous_owner_id !== rid)
           .map((dp) => ({ season: dp.season, round: dp.round, fromManager: rosterToManager[dp.roster_id] || null }));
-        let faabIn = 0;
-        for (const wb of tx.waiver_budget || []) if (wb.receiver === rid) faabIn += wb.amount || 0;
-        return { rosterId: rid, managerId: mid, players: playersIn, picks: picksIn, faab: faabIn };
+        let faabIn = 0, faabOut = 0;
+        for (const wb of tx.waiver_budget || []) { if (wb.receiver === rid) faabIn += wb.amount || 0; if (wb.sender === rid) faabOut += wb.amount || 0; }
+        const playersOut = [];
+        for (const [pid, fromR] of Object.entries(tx.drops || {})) if (fromR === rid) playersOut.push(pid);
+        const picksOut = (tx.draft_picks || []).filter((dp) => dp.previous_owner_id === rid && dp.owner_id !== rid).map((dp) => ({ season: dp.season, round: dp.round }));
+        return { rosterId: rid, managerId: mid, players: playersIn, picks: picksIn, faab: faabIn, playersOut, picksOut, faabOut };
       });
       allTrades.push({ season, week: tx.leg, created: tx.created || tx.status_updated || 0, sides });
       continue;
@@ -306,7 +312,7 @@ for (const season of SEASONS) {
       }
     } else if (tx.type === "free_agent") {
       e.faAdds++;
-      for (const pid of Object.keys(tx.adds || {})) referencedPlayers.add(pid);
+      for (const pid of Object.keys(tx.adds || {})) { referencedPlayers.add(pid); faEvents.push({ managerId: mid, playerId: pid, season, week: tx.leg }); }
     }
   }
 
@@ -455,6 +461,71 @@ for (const t of allTrades) {
 }
 const trades = [...allTrades].sort((a, b) => (b.created || 0) - (a.created || 0));
 
+// ---- Trade analytics (partners, journeys, blockbusters, buyers/sellers, timing) ----
+const tIdx = (s) => SEASONS.indexOf(s);
+const tradePartnerCount = {};
+const playerTradeCount = {};
+const mgrTradeAgg = {};
+const tradesByWeek = {};
+allTrades.forEach((t, idx) => {
+  tradesByWeek[t.week] = (tradesByWeek[t.week] || 0) + 1;
+  const mids = t.sides.map((s) => s.managerId).filter(Boolean);
+  for (let i = 0; i < mids.length; i++)
+    for (let j = i + 1; j < mids.length; j++) {
+      const k = pairKey(mids[i], mids[j]);
+      tradePartnerCount[k] = (tradePartnerCount[k] || 0) + 1;
+    }
+  for (const s of t.sides) {
+    if (!s.managerId) continue;
+    const m = (mgrTradeAgg[s.managerId] ||= { trades: 0, playersIn: 0, playersOut: 0, picksIn: 0, picksOut: 0, faabIn: 0, faabOut: 0, deadline: 0 });
+    m.trades++;
+    m.playersIn += s.players.length; m.playersOut += s.playersOut.length;
+    m.picksIn += s.picks.length; m.picksOut += s.picksOut.length;
+    m.faabIn += s.faab; m.faabOut += s.faabOut;
+    if (t.week >= 11) m.deadline++;
+    for (const pid of s.players) { const e = (playerTradeCount[pid] ||= { count: 0, idxs: [] }); e.count++; e.idxs.push(idx); }
+  }
+});
+const sortKey = (x) => `${x.season}-${String(x.week).padStart(2, "0")}`;
+const mostTraded = Object.entries(playerTradeCount)
+  .filter(([, e]) => e.count >= 2)
+  .map(([pid, e]) => ({
+    playerId: pid, name: players[pid]?.name || pid, pos: players[pid]?.pos || null, count: e.count,
+    journey: e.idxs.map((i) => {
+      const t = allTrades[i];
+      return { season: t.season, week: t.week, date: t.date, from: t.sides.find((s) => s.playersOut.includes(pid))?.managerId || null, to: t.sides.find((s) => s.players.includes(pid))?.managerId || null };
+    }).sort((a, b) => sortKey(a).localeCompare(sortKey(b))),
+  }))
+  .sort((a, b) => b.count - a.count)
+  .slice(0, 10);
+const blockbusters = [...allTrades]
+  .map((t) => ({ trade: t, assets: t.sides.reduce((a, s) => a + s.players.length + s.picks.length, 0) + (t.sides.some((s) => s.faab > 0) ? 1 : 0) }))
+  .sort((a, b) => b.assets - a.assets)
+  .slice(0, 6);
+const tradeAnalytics = {
+  partners: Object.entries(tradePartnerCount).map(([k, c]) => { const [a, b] = k.split("|"); return { a, b, count: c }; }).sort((x, y) => y.count - x.count),
+  mostTraded, blockbusters, byWeek: tradesByWeek, byManager: mgrTradeAgg,
+};
+
+// ---- Roster acquisition source (current rosters) ----
+const acqEvents = [];
+for (const s of SEASONS) for (const p of seasonsOut[s].draftBoard) if (p.managerId) acqEvents.push({ mid: p.managerId, pid: p.playerId, source: seasonsOut[s].draftType === "auction" ? "auction" : "draft", t: tIdx(s) * 100 });
+for (const w of allWaiverAdds) if (w.managerId) acqEvents.push({ mid: w.managerId, pid: w.playerId, source: "waiver", t: tIdx(w.season) * 100 + (w.week || 0) });
+for (const f of faEvents) if (f.managerId) acqEvents.push({ mid: f.managerId, pid: f.playerId, source: "free agent", t: tIdx(f.season) * 100 + (f.week || 0) });
+for (const t of allTrades) for (const sd of t.sides) if (sd.managerId) for (const pid of sd.players) acqEvents.push({ mid: sd.managerId, pid, source: "trade", t: tIdx(t.season) * 100 + (t.week || 0) });
+const acqMap = {};
+for (const e of acqEvents) { const k = e.mid + "|" + e.pid; if (!acqMap[k] || e.t >= acqMap[k].t) acqMap[k] = e; }
+const acquisition = {};
+for (const [mid, pids] of Object.entries(currentRosters)) {
+  const breakdown = {}, list = [];
+  for (const pid of pids) {
+    const src = acqMap[mid + "|" + pid]?.source || "kept";
+    breakdown[src] = (breakdown[src] || 0) + 1;
+    list.push({ id: pid, name: players[pid]?.name || pid, pos: players[pid]?.pos || null, source: src });
+  }
+  acquisition[mid] = { breakdown, players: list };
+}
+
 // ---- Auction (startup) records ----
 let auctionRecords = null;
 const auctionSeason = SEASONS.find((s) => seasonsOut[s].draftType === "auction");
@@ -495,7 +566,7 @@ const league = {
   managers: managerList,
   seasons: seasonsOut,
   allTime: { standings: managerList.filter((m) => m.allTime.seasons > 0).sort((a, b) => b.allTime.titles - a.allTime.titles || b.allTime.winPct - a.allTime.winPct || b.allTime.pf - a.allTime.pf) },
-  headToHead: h2hList, records, vpRecords, faabRecords, auctionRecords, trades, draft: draftAnalysis, topPlayerSeasons,
+  headToHead: h2hList, records, vpRecords, faabRecords, auctionRecords, trades, tradeAnalytics, acquisition, draft: draftAnalysis, topPlayerSeasons,
 };
 
 writeFileSync(join(OUT, "league.json"), JSON.stringify(league));

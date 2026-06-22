@@ -4,54 +4,63 @@ import PageHeader from "../components/PageHeader.astro";
 import StatCard from "../components/StatCard.astro";
 import RankBars from "../components/RankBars.astro";
 import ManagerChip from "../components/ManagerChip.astro";
-import { trades, managers, managerName, managerColor, fmt, ordinal } from "../lib/data.js";
+import TradeCard from "../components/TradeCard.astro";
+import { trades, tradeAnalytics, managers, allTimeStandings, getManager, managerName, managerColor, avatarUrl, fmt } from "../lib/data.js";
 
-const traderBars = [...managers]
-  .filter((m) => m.allTime.trades > 0)
-  .sort((a, b) => b.allTime.trades - a.allTime.trades)
-  .map((m) => ({
-    name: m.name, value: m.allTime.trades, valueLabel: `${m.allTime.trades}`,
-    color: managerColor(m.id), href: `/managers/${m.id}`,
-    sub: `${m.allTime.trades} trade${m.allTime.trades !== 1 ? "s" : ""}`,
-  }));
-
+const A = tradeAnalytics;
 const totalTrades = trades.length;
+
+// most active
+const traderBars = [...managers].filter((m) => m.allTime.trades > 0).sort((a, b) => b.allTime.trades - a.allTime.trades)
+  .map((m) => ({ name: m.name, value: m.allTime.trades, valueLabel: `${m.allTime.trades}`, color: managerColor(m.id), href: `/managers/${m.id}`, sub: `${m.allTime.trades} trades` }));
 const mostActive = traderBars[0];
-const bySeason = {};
-for (const t of trades) bySeason[t.season] = (bySeason[t.season] || 0) + 1;
-const busiest = Object.entries(bySeason).sort((a, b) => b[1] - a[1])[0];
-const pickStr = (pk, ownerMid) =>
-  `${pk.season} ${ordinal(pk.round)}` + (pk.fromManager && pk.fromManager !== ownerMid ? ` · ${managerName(pk.fromManager)}` : "");
+const biggest = A.blockbusters[0];
+
+// trades by week (timing)
+const weekEntries = Object.entries(A.byWeek).map(([w, n]) => ({ w: +w, n })).sort((a, b) => a.w - b.w);
+const maxWeek = Math.max(...weekEntries.map((e) => e.n), 1);
+const weekLabel = (w) => (w === 1 ? "Off-szn" : `Wk ${w}`);
+
+// buyers vs sellers
+const bs = managers.map((m) => { const t = A.byManager[m.id] || {}; return { id: m.id, name: m.name, netPicks: (t.picksIn || 0) - (t.picksOut || 0), netPlayers: (t.playersIn || 0) - (t.playersOut || 0), trades: t.trades || 0 }; })
+  .filter((m) => m.trades > 0).sort((a, b) => b.netPicks - a.netPicks);
+const maxNet = Math.max(...bs.flatMap((m) => [Math.abs(m.netPicks), Math.abs(m.netPlayers)]), 1);
+
+// partner matrix
+const order = allTimeStandings.map((m) => m.id);
+const pairCount = {};
+A.partners.forEach((p) => (pairCount[[p.a, p.b].sort().join("|")] = p.count));
+const pairOf = (x, y) => (x === y ? -1 : pairCount[[x, y].sort().join("|")] || 0);
+const maxPair = Math.max(...A.partners.map((p) => p.count), 1);
+const pairTint = (n) => (n <= 0 ? "transparent" : `color-mix(in srgb, var(--accent-2) ${Math.round(20 + (n / maxPair) * 55)}%, transparent)`);
 ---
 
-<Base active="trades" title="Trades" description="Every trade in RENG dynasty history — players, picks and FAAB.">
+<Base active="trades" title="Trades" description="Every trade, plus trade-partner heatmaps, blockbusters, buyers vs sellers and player journeys.">
   <PageHeader eyebrow="The trade block" title="Trades"
-    sub="Every deal in league history — players, draft picks and FAAB, both sides of the table. Dynasty is a contact sport." />
+    sub="Every deal in league history — who deals with whom, the blockbusters, the rebuilders vs. win-now buyers, and the players who got passed around." />
 
   <section class="section-sm">
     <div class="wrap">
       <div class="grid cols-3" style="margin-bottom:22px">
         <StatCard label="Total trades" value={totalTrades} accent="accent" icon="🔄" sub="all-time, all seasons" />
         <StatCard label="Most active" value={mostActive.value} accent="purple" icon="📞" sub={`${mostActive.name} — never stops dealing`} />
-        <StatCard label="Busiest season" value={busiest[1]} unit="trades" accent="orange" icon="🔥" sub={`${busiest[0]} season`} />
+        <StatCard label="Biggest blockbuster" value={biggest.assets} unit="assets" accent="gold" icon="💣" sub={`${biggest.trade.season} · ${biggest.trade.sides.length}-team`} />
       </div>
 
       <div class="grid cols-2" style="align-items:start">
         <div class="panel panel-pad">
           <h3 style="font-size:16px;margin-bottom:4px">📞 Most Active Traders</h3>
-          <p class="dim" style="font-size:12px;margin:0 0 16px">Total trades made (each deal counts for both teams).</p>
+          <p class="dim" style="font-size:12px;margin:0 0 16px">Total deals made (counts for both teams).</p>
           <RankBars items={traderBars} />
         </div>
-
         <div class="panel panel-pad">
-          <h3 style="font-size:16px;margin-bottom:4px">📊 Trades by Season</h3>
-          <p class="dim" style="font-size:12px;margin:0 0 16px">Deal volume each year.</p>
-          <div class="season-bars">
-            {Object.entries(bySeason).sort((a, b) => a[0].localeCompare(b[0])).map(([s, n]) => (
-              <div class="sb-row">
-                <span class="num sb-yr">{s}</span>
-                <span class="sb-track"><span style={`width:${(n / busiest[1]) * 100}%`}></span></span>
-                <span class="num sb-n">{n}</span>
+          <h3 style="font-size:16px;margin-bottom:4px">🗓️ When Deals Happen</h3>
+          <p class="dim" style="font-size:12px;margin:0 0 16px">Most action hits in the off-season; a second bump at the Week-12 deadline.</p>
+          <div class="wk-bars">
+            {weekEntries.map((e) => (
+              <div class="wkb">
+                <span class="wkb-bar" style={`height:${(e.n / maxWeek) * 100}%`}><span class="wkb-n num">{e.n}</span></span>
+                <span class="wkb-lbl num">{weekLabel(e.w)}</span>
               </div>
             ))}
           </div>
@@ -60,35 +69,20 @@ const pickStr = (pk, ownerMid) =>
     </div>
   </section>
 
-  <!-- trade feed -->
-  <section class="section-sm" style="padding-bottom:40px">
+  <!-- buyers vs sellers -->
+  <section class="section-sm">
     <div class="wrap">
-      <div class="row between" style="margin-bottom:16px">
-        <h2 class="section-title" style="font-size:clamp(20px,3vw,26px)">📜 The Full Feed</h2>
-        <span class="chip">{totalTrades} deals · newest first</span>
-      </div>
-      <div class="feed">
-        {trades.map((t) => (
-          <div class="trade">
-            <div class="t-meta">
-              <span class="num t-szn">{t.season}</span><span class="dim">· Wk {t.week}</span>
-              {t.date && <span class="dim">· {t.date}</span>}
-              {t.sides.length > 2 && <span class="chip" style="margin-left:auto">{t.sides.length}-team</span>}
-            </div>
-            <div class={`t-sides ${t.sides.length === 2 ? "two" : "many"}`}>
-              {t.sides.map((s) => (
-                <div class="t-side" style={`--c:${managerColor(s.managerId)}`}>
-                  <div class="t-who"><ManagerChip id={s.managerId} size={24} /><span class="t-gets">receives</span></div>
-                  <div class="t-assets">
-                    {s.playerNames.length === 0 && s.picks.length === 0 && !s.faab && <span class="dim" style="font-size:12.5px">future considerations</span>}
-                    {s.playerNames.map((p) => (
-                      <span class="t-asset"><b>{p.name}</b>{p.pos && <span class={`tag-pos pos-${p.pos}`}>{p.pos}</span>}</span>
-                    ))}
-                    {s.picks.map((pk) => (<span class="t-asset t-pick">🎟 {pickStr(pk, s.managerId)}</span>))}
-                    {s.faab > 0 && <span class="t-asset t-faab">${s.faab} FAAB</span>}
-                  </div>
-                </div>
-              ))}
+      <div class="eyebrow">Rebuild or contend</div>
+      <h2 class="section-title" style="font-size:clamp(20px,3vw,26px);margin-bottom:4px">🔮 Buyers vs. Sellers</h2>
+      <p class="section-sub" style="margin-bottom:16px">Net assets gained via trade. <b class="pos">+ picks</b> = stockpiling for the future (rebuilder). <b class="blue-t">+ players</b> = going for it now.</p>
+      <div class="panel panel-pad">
+        <div class="bs-head"><span></span><span class="dim">◀ net picks</span><span class="dim">net players ▶</span></div>
+        {bs.map((m) => (
+          <div class="bs-row">
+            <div class="bs-name"><ManagerChip id={m.id} size={24} /></div>
+            <div class="bs-bars">
+              <div class="bs-left"><span class="bs-fill picks" style={`width:${(Math.max(0, m.netPicks) / maxNet) * 100}%`}>{m.netPicks > 0 ? `+${m.netPicks}` : ""}</span></div>
+              <div class="bs-right"><span class="bs-fill players" style={`width:${(Math.max(0, m.netPlayers) / maxNet) * 100}%`}>{m.netPlayers > 0 ? `+${m.netPlayers}` : ""}</span></div>
             </div>
           </div>
         ))}
@@ -96,29 +90,116 @@ const pickStr = (pk, ownerMid) =>
     </div>
   </section>
 
-  <style>
-    .season-bars { display: flex; flex-direction: column; gap: 11px; }
-    .sb-row { display: grid; grid-template-columns: 42px 1fr 28px; align-items: center; gap: 10px; }
-    .sb-yr { font-size: 13px; font-weight: 600; color: var(--muted); }
-    .sb-track { height: 9px; background: var(--panel-3); border-radius: 999px; overflow: hidden; }
-    .sb-track span { display: block; height: 100%; background: var(--accent-2); border-radius: 999px; }
-    .sb-n { font-size: 13px; font-weight: 700; text-align: right; }
+  <!-- partner matrix -->
+  <section class="section-sm">
+    <div class="wrap">
+      <div class="eyebrow">Who deals with whom</div>
+      <h2 class="section-title" style="font-size:clamp(20px,3vw,26px);margin-bottom:14px">🤝 Trade-Partner Matrix</h2>
+      <div class="panel panel-pad">
+        <div style="overflow-x:auto">
+          <table class="tbl matrix">
+            <thead>
+              <tr><th>vs</th>{order.map((id) => (<th class="mx-col"><span class="mx-av" title={managerName(id)}>{avatarUrl(getManager(id)?.avatar) ? <img src={avatarUrl(getManager(id)?.avatar)} alt="" /> : managerName(id).slice(0, 2)}</span></th>))}</tr>
+            </thead>
+            <tbody>
+              {order.map((rid) => (
+                <tr>
+                  <td class="mx-row"><ManagerChip id={rid} size={22} /></td>
+                  {order.map((cid) => { const n = pairOf(rid, cid); return (
+                    <td class="td-center mx-cell" style={n > 0 ? `background:${pairTint(n)}` : ""} title={n >= 0 ? `${managerName(rid)} & ${managerName(cid)}: ${n} trades` : ""}>
+                      {n < 0 ? <span class="dim">—</span> : n > 0 ? <span class="num" style="font-weight:700">{n}</span> : <span class="faint">·</span>}
+                    </td>); })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p class="dim" style="font-size:11.5px;margin-top:10px">Number of trades between each pair · darker = more deals.</p>
+      </div>
+    </div>
+  </section>
 
+  <!-- blockbusters -->
+  <section class="section-sm">
+    <div class="wrap">
+      <div class="eyebrow">Shake the league</div>
+      <h2 class="section-title" style="font-size:clamp(20px,3vw,26px);margin-bottom:14px">💣 Biggest Blockbusters</h2>
+      <div class="feed">
+        {A.blockbusters.map((b) => <TradeCard trade={b.trade} badge={`${b.assets} assets`} />)}
+      </div>
+    </div>
+  </section>
+
+  <!-- player journeys (trade trees) -->
+  <section class="section-sm">
+    <div class="wrap">
+      <div class="eyebrow">Hot potatoes</div>
+      <h2 class="section-title" style="font-size:clamp(20px,3vw,26px);margin-bottom:4px">🌳 Player Journeys</h2>
+      <p class="section-sub" style="margin-bottom:16px">The most-traded players and the path they took through the league.</p>
+      <div class="grid cols-2" style="align-items:start">
+        {A.mostTraded.map((p) => (
+          <div class="journey panel panel-pad">
+            <div class="jr-head"><b>{p.name}</b>{p.pos && <span class={`tag-pos pos-${p.pos}`}>{p.pos}</span>}<span class="chip" style="margin-left:auto">traded ×{p.count}</span></div>
+            <div class="jr-path">
+              {p.journey[0]?.from && <><span class="jr-node"><ManagerChip id={p.journey[0].from} size={20} link={false} /></span><span class="jr-arrow">→</span></>}
+              {p.journey.map((j, i) => (<>
+                <span class="jr-node"><ManagerChip id={j.to} size={20} link={false} /></span>
+                {i < p.journey.length - 1 && <span class="jr-arrow">→</span>}
+              </>))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <!-- full feed -->
+  <section class="section-sm" style="padding-bottom:40px">
+    <div class="wrap">
+      <div class="row between" style="margin-bottom:16px">
+        <h2 class="section-title" style="font-size:clamp(20px,3vw,26px)">📜 The Full Feed</h2>
+        <span class="chip">{totalTrades} deals · newest first</span>
+      </div>
+      <div class="feed">
+        {trades.map((t) => <TradeCard trade={t} />)}
+      </div>
+    </div>
+  </section>
+
+  <style>
+    .blue-t { color: var(--accent-2); }
     .feed { display: flex; flex-direction: column; gap: 12px; }
-    .trade { background: linear-gradient(180deg, var(--panel), var(--bg-2)); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
-    .t-meta { display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-family: var(--display); margin-bottom: 12px; }
-    .t-szn { font-weight: 700; }
-    .t-sides { display: grid; gap: 12px; }
-    .t-sides.two { grid-template-columns: 1fr 1fr; }
-    .t-sides.many { grid-template-columns: 1fr; }
-    .t-side { background: var(--bg-2); border: 1px solid var(--line); border-left: 3px solid var(--c); border-radius: var(--radius-sm); padding: 11px 13px; }
-    .t-who { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 9px; }
-    .t-gets { font-size: 9.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--faint); font-weight: 700; }
-    .t-assets { display: flex; flex-wrap: wrap; gap: 6px; }
-    .t-asset { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; background: var(--panel); border: 1px solid var(--line); padding: 3px 8px; border-radius: 6px; }
-    .t-asset b { font-weight: 600; }
-    .t-pick { color: var(--accent-2); border-color: rgba(84,166,255,.25); }
-    .t-faab { color: var(--orange); border-color: rgba(255,159,69,.25); font-weight: 700; }
-    @media (max-width: 560px) { .t-sides.two { grid-template-columns: 1fr; } }
+
+    .wk-bars { display: flex; align-items: flex-end; gap: 6px; height: 150px; padding-top: 10px; }
+    .wkb { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end; gap: 6px; }
+    .wkb-bar { width: 100%; max-width: 30px; background: linear-gradient(180deg, var(--accent-2), color-mix(in srgb, var(--accent-2) 40%, var(--panel-3))); border-radius: 5px 5px 0 0; position: relative; min-height: 4px; display: flex; justify-content: center; }
+    .wkb-n { position: absolute; top: -16px; font-size: 11px; font-weight: 700; color: var(--muted); }
+    .wkb-lbl { font-size: 10px; color: var(--faint); white-space: nowrap; }
+
+    .bs-head { display: grid; grid-template-columns: 140px 1fr 1fr; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 10px; }
+    .bs-head span:nth-child(2) { text-align: right; padding-right: 8px; }
+    .bs-head span:nth-child(3) { padding-left: 8px; }
+    .bs-row { display: grid; grid-template-columns: 140px 1fr; align-items: center; gap: 10px; padding: 5px 0; }
+    .bs-bars { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+    .bs-left, .bs-right { height: 18px; display: flex; align-items: center; }
+    .bs-left { justify-content: flex-end; border-right: 1px solid var(--line-2); padding-right: 3px; }
+    .bs-right { padding-left: 3px; }
+    .bs-fill { height: 100%; border-radius: 4px; display: flex; align-items: center; padding: 0 6px; font-size: 11px; font-weight: 700; color: #04221a; min-width: 2px; }
+    .bs-fill.picks { background: var(--accent); justify-content: flex-end; }
+    .bs-fill.players { background: var(--accent-2); color: #04121a; }
+    @media (max-width: 600px) { .bs-head, .bs-row { grid-template-columns: 96px 1fr; } .bs-name { font-size: 12px; } }
+
+    .matrix th, .matrix td { padding: 5px 4px; }
+    .mx-col { text-align: center; }
+    .mx-av { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; overflow: hidden; background: var(--panel-3); font-size: 9px; color: var(--muted); }
+    .mx-av img { width: 100%; height: 100%; object-fit: cover; }
+    .mx-row { white-space: nowrap; }
+    .mx-cell { min-width: 34px; font-size: 12.5px; border-radius: 5px; }
+
+    .journey { display: flex; flex-direction: column; gap: 11px; }
+    .jr-head { display: flex; align-items: center; gap: 8px; font-family: var(--display); font-size: 15px; }
+    .jr-path { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .jr-node { background: var(--bg-2); border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px 3px 4px; }
+    .jr-arrow { color: var(--faint); font-weight: 700; }
   </style>
 </Base>

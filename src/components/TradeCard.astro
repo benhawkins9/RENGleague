@@ -1,0 +1,46 @@
+---
+import ManagerChip from "./ManagerChip.astro";
+import { managerColor, managerName, ordinal } from "../lib/data.js";
+const { trade, badge } = Astro.props;
+const t = trade;
+const pickStr = (pk, owner) =>
+  `${pk.season} ${ordinal(pk.round)}` + (pk.fromManager && pk.fromManager !== owner ? ` · ${managerName(pk.fromManager)}` : "");
+---
+<div class="trade">
+  <div class="t-meta">
+    <span class="num t-szn">{t.season}</span><span class="dim">· Wk {t.week}</span>
+    {t.date && <span class="dim">· {t.date}</span>}
+    {badge && <span class="chip gold" style="margin-left:auto">{badge}</span>}
+    {!badge && t.sides.length > 2 && <span class="chip" style="margin-left:auto">{t.sides.length}-team</span>}
+  </div>
+  <div class={`t-sides ${t.sides.length === 2 ? "two" : "many"}`}>
+    {t.sides.map((s) => (
+      <div class="t-side" style={`--c:${managerColor(s.managerId)}`}>
+        <div class="t-who"><ManagerChip id={s.managerId} size={24} /><span class="t-gets">receives</span></div>
+        <div class="t-assets">
+          {s.playerNames.length === 0 && s.picks.length === 0 && !s.faab && <span class="dim" style="font-size:12.5px">future considerations</span>}
+          {s.playerNames.map((p) => (<span class="t-asset"><b>{p.name}</b>{p.pos && <span class={`tag-pos pos-${p.pos}`}>{p.pos}</span>}</span>))}
+          {s.picks.map((pk) => (<span class="t-asset t-pick">🎟 {pickStr(pk, s.managerId)}</span>))}
+          {s.faab > 0 && <span class="t-asset t-faab">${s.faab} FAAB</span>}
+        </div>
+      </div>
+    ))}
+  </div>
+</div>
+<style>
+  .trade { background: linear-gradient(180deg, var(--panel), var(--bg-2)); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+  .t-meta { display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-family: var(--display); margin-bottom: 12px; }
+  .t-szn { font-weight: 700; }
+  .t-sides { display: grid; gap: 12px; }
+  .t-sides.two { grid-template-columns: 1fr 1fr; }
+  .t-sides.many { grid-template-columns: 1fr; }
+  .t-side { background: var(--bg-2); border: 1px solid var(--line); border-left: 3px solid var(--c); border-radius: var(--radius-sm); padding: 11px 13px; }
+  .t-who { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 9px; }
+  .t-gets { font-size: 9.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--faint); font-weight: 700; }
+  .t-assets { display: flex; flex-wrap: wrap; gap: 6px; }
+  .t-asset { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; background: var(--panel); border: 1px solid var(--line); padding: 3px 8px; border-radius: 6px; }
+  .t-asset b { font-weight: 600; }
+  .t-pick { color: var(--accent-2); border-color: rgba(84,166,255,.25); }
+  .t-faab { color: var(--orange); border-color: rgba(255,159,69,.25); font-weight: 700; }
+  @media (max-width: 560px) { .t-sides.two { grid-template-columns: 1fr; } }
+</style>

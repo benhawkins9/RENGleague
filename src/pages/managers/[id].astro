@@ -3,7 +3,7 @@ import Base from "../../layouts/Base.astro";
 import StatCard from "../../components/StatCard.astro";
 import ManagerChip from "../../components/ManagerChip.astro";
 import {
-  managers, seasons, completedSeasons, headToHead, draft,
+  managers, seasons, completedSeasons, headToHead, draft, acquisition,
   getManager, managerName, managerColor, avatarUrl, fmt, pct, signed, record, ordinal,
 } from "../../lib/data.js";
 
@@ -50,6 +50,17 @@ const ownedBy = [...ranked].sort((x, y) => (x.myWins - x.oppWins) - (y.myWins - 
 // drafts
 const mySteals = draft.steals.filter((d) => d.managerId === id).slice(0, 4);
 const myBusts = draft.busts.filter((d) => d.managerId === id).slice(0, 4);
+
+const acq = acquisition[id];
+const acqTotal = acq?.players.length || 0;
+const acqSources = [
+  { key: "draft", label: "Rookie draft", color: "var(--accent)" },
+  { key: "auction", label: "Auction", color: "var(--gold)" },
+  { key: "trade", label: "Trade", color: "var(--purple)" },
+  { key: "waiver", label: "Waiver", color: "var(--orange)" },
+  { key: "free agent", label: "Free agent", color: "var(--accent-2)" },
+  { key: "kept", label: "Kept", color: "var(--muted)" },
+];
 
 // Playoff result per season (champion / runner-up / final 4 / play-in / missed)
 const resultFor = (season, seed) => {
@@ -200,6 +211,26 @@ const resultFor = (season, seed) => {
     </div>
   </section>
 
+  <!-- how the roster was built -->
+  <section class="section-sm" style="padding-bottom:40px">
+    <div class="wrap">
+      <div class="panel panel-pad">
+        <h3 style="font-size:16px;margin-bottom:4px">🧱 How the Roster Was Built</h3>
+        <p class="dim" style="font-size:12.5px;margin:0 0 14px">Current roster ({acqTotal} players) by how each was acquired.</p>
+        {acqTotal > 0 ? (
+          <>
+            <div class="acq-bar">
+              {acqSources.map((s) => (acq.breakdown[s.key] ? <span class="acq-seg" style={`width:${(acq.breakdown[s.key] / acqTotal) * 100}%;background:${s.color}`} title={`${s.label}: ${acq.breakdown[s.key]}`}></span> : null))}
+            </div>
+            <div class="acq-legend">
+              {acqSources.map((s) => (acq.breakdown[s.key] ? <span class="acq-leg"><span class="dot" style={`background:${s.color}`}></span>{s.label} <b>{acq.breakdown[s.key]}</b></span> : null))}
+            </div>
+          </>
+        ) : <p class="dim" style="font-size:13px">No current roster on record.</p>}
+      </div>
+    </div>
+  </section>
+
   <style>
     .mgr-hero { padding: 40px 0 24px; border-bottom: 1px solid var(--line); background: linear-gradient(180deg, color-mix(in srgb, var(--c) 9%, var(--bg)), var(--bg)); }
     .hero-grid { display: flex; gap: 24px; align-items: center; }
@@ -221,6 +252,12 @@ const resultFor = (season, seed) => {
     .draft-row:last-child { border: none; }
     .faab-line { display: flex; flex-wrap: wrap; gap: 14px; padding: 8px 0 12px; margin-bottom: 6px; border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
     .faab-line b { color: var(--text); font-size: 14px; }
+    .acq-bar { display: flex; height: 26px; border-radius: 8px; overflow: hidden; background: var(--panel-3); margin-bottom: 14px; }
+    .acq-seg { height: 100%; }
+    .acq-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+    .acq-leg { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+    .acq-leg .dot { width: 10px; height: 10px; border-radius: 3px; }
+    .acq-leg b { color: var(--text); }
     @media (max-width: 620px) { .hero-grid { flex-direction: column; text-align: center; align-items: flex-start; } }
   </style>
 </Base>
