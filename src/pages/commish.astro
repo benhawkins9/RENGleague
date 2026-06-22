@@ -1,0 +1,161 @@
+---
+import Base from "../layouts/Base.astro";
+import PageHeader from "../components/PageHeader.astro";
+import ManagerChip from "../components/ManagerChip.astro";
+import { managers, dynasty, chatStats, getManager, managerColor, avatarUrl, fmt, pct, record, ordinal } from "../lib/data.js";
+
+// The two co-commissioners
+const IDS = { bm: "470083698897711104", og: "470070299694460928" };
+const dynById = Object.fromEntries(dynasty.teams.map((t) => [t.managerId, t]));
+const msgById = Object.fromEntries(chatStats.yappers.map((y) => [y.managerId, y.count]));
+const build = (id, role, blurb) => {
+  const m = getManager(id), a = m.allTime, d = dynById[id];
+  return { id, m, a, d, role, blurb, msgs: msgById[id] || 0, color: managerColor(id) };
+};
+const bm = build(IDS.bm, "Minister of Chaos",
+  "The league's loudest voice and busiest GM. A league-high 22 trades and 361 messages — Big Monkey is either blowing up the group chat or blowing up his own roster, usually both before noon. Owns the worst record of any commissioner alive (13-29, zero rings) and somehow the most fun in the room. Building around Ashton Jeanty and pure, uncut belief.");
+const og = build(IDS.og, "The Quiet Assassin",
+  "Lets the trophy do the talking. 2024 champion, a 62% win rate, and a grand total of 56 messages all-time — runs the auction, sets the schedule, and quietly collects everyone's dues while saying almost nothing. The competence to Big Monkey's chaos. Anchored by Jaxon Smith-Njigba.");
+const commish = [bm, og];
+
+// Tale of the Tape — higher metricN = "leads" (dynasty rank negated so lower rank leads)
+const tape = [
+  { label: "All-time record", bm: record(bm.a.w, bm.a.l), og: record(og.a.w, og.a.l), bmN: bm.a.winPct, ogN: og.a.winPct },
+  { label: "Win %", bm: pct(bm.a.winPct), og: pct(og.a.winPct), bmN: bm.a.winPct, ogN: og.a.winPct },
+  { label: "Championships", bm: `${bm.a.titles} 🏆`, og: `${og.a.titles} 🏆`, bmN: bm.a.titles, ogN: og.a.titles },
+  { label: "Best finish", bm: ordinal(bm.a.bestSeed) + " seed", og: ordinal(og.a.bestSeed) + " seed", bmN: -bm.a.bestSeed, ogN: -og.a.bestSeed },
+  { label: "Career trades", bm: bm.a.trades, og: og.a.trades, bmN: bm.a.trades, ogN: og.a.trades },
+  { label: "FAAB spent (all-time)", bm: "$" + fmt(bm.a.faabSpent), og: "$" + fmt(og.a.faabSpent), bmN: bm.a.faabSpent, ogN: og.a.faabSpent },
+  { label: "Chat messages", bm: fmt(bm.msgs), og: fmt(og.msgs), bmN: bm.msgs, ogN: og.msgs },
+  { label: "Dynasty power rank", bm: "#" + bm.d.rank, og: "#" + og.d.rank, bmN: -bm.d.rank, ogN: -og.d.rank },
+];
+
+const duties = [
+  { icon: "🗓️", t: "Run the season", d: "Set the schedule, manage the Week-15 shoot-out, and keep the VP machine honest." },
+  { icon: "💰", t: "Money matters", d: "Run the startup auction and collect the $200 dues (looking at you)." },
+  { icon: "⚖️", t: "Settle disputes", d: "Rule on collusion accusations, veto debates… and start a few fights too." },
+  { icon: "📣", t: "Keep the chat alive", d: "Someone has to send 361 messages a year. That someone is Big Monkey." },
+  { icon: "🏆", t: "Crown the champ", d: "Safeguard the trophy, the history, and the bragging rights since 2023." },
+];
+---
+
+<Base active="commish" title="Meet the Commish" description="The two co-commissioners running the Regular Everday Normal Guys dynasty league.">
+  <PageHeader eyebrow="The Office of the Commissioner" title="Meet the Commish"
+    sub="Two men, one yellow tube, a shared vision. Running RENG since 2023." />
+
+  <section class="section-sm">
+    <div class="wrap">
+      <!-- hero photo -->
+      <figure class="photo">
+        <img src="/commish.jpg" alt="The co-commissioners mid-water-slide, throwing peace signs"
+          onerror="this.closest('.photo').classList.add('no-img')" />
+        <div class="ph-fallback">
+          <div style="font-size:34px">🛝🤙</div>
+          <p>Drop the water-slide photo at <code>public/commish.jpg</code> and it lands right here.</p>
+        </div>
+        <figcaption>“You may not like it, but this is what peak co-commissioning looks like.” — <strong>Big Monkey</strong></figcaption>
+      </figure>
+
+      <!-- the two commissioners -->
+      <div class="grid cols-2 cm-grid">
+        {commish.map((c) => (
+          <article class="cm-card" style={`--c:${c.color}`}>
+            <div class="cm-top">
+              <img class="cm-av" src={avatarUrl(c.m.avatar, false) || ""} alt="" onerror="this.style.visibility='hidden'" />
+              <div>
+                <div class="cm-role">Co-Commissioner</div>
+                <a class="cm-name" href={`/managers/${c.id}`}>{c.m.name}</a>
+                <div class="cm-handle">@{c.m.displayName} · “{c.role}”</div>
+              </div>
+            </div>
+            <p class="cm-blurb">{c.blurb}</p>
+            <div class="cm-stats">
+              <div><span class="num">{record(c.a.w, c.a.l)}</span><label>Record</label></div>
+              <div><span class="num">{c.a.titles}</span><label>Titles</label></div>
+              <div><span class="num">{c.a.trades}</span><label>Trades</label></div>
+              <div><span class="num">{fmt(c.msgs)}</span><label>Messages</label></div>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <!-- tale of the tape -->
+      <div class="panel panel-pad tape">
+        <h3 style="font-size:16px;margin-bottom:4px">⚖️ Tale of the Tape</h3>
+        <p class="dim" style="font-size:12px;margin:0 0 16px">Chaos vs. competence, by the numbers. The leader of each row is highlighted.</p>
+        <div class="tape-head">
+          <span style={`color:${bm.color}`}>{bm.m.name}</span>
+          <span class="dim">vs</span>
+          <span style={`color:${og.color}`}>{og.m.name}</span>
+        </div>
+        {tape.map((r) => (
+          <div class="tape-row">
+            <span class={`tv left${r.bmN > r.ogN ? " win" : ""}`} style={`--c:${bm.color}`}>{r.bm}</span>
+            <span class="tl">{r.label}</span>
+            <span class={`tv right${r.ogN > r.bmN ? " win" : ""}`} style={`--c:${og.color}`}>{r.og}</span>
+          </div>
+        ))}
+      </div>
+
+      <!-- duties -->
+      <div class="eyebrow" style="margin-top:30px">The job description</div>
+      <h2 class="section-title" style="font-size:clamp(20px,3vw,26px);margin-bottom:14px">What does the Commish even do?</h2>
+      <div class="duties">
+        {duties.map((d) => (
+          <div class="duty"><span class="duty-i">{d.icon}</span><div><strong>{d.t}</strong><p class="dim">{d.d}</p></div></div>
+        ))}
+      </div>
+
+      <div class="callout">
+        <div>
+          <strong>Got a beef, a rule change, or some commish lore to enshrine?</strong>
+          <p class="dim" style="margin:6px 0 0">This page is just getting started — send it to the commissioners. Disputes settled in the group chat, as tradition demands.</p>
+        </div>
+        <a class="btn" href="/dues">Pay your dues 💵</a>
+      </div>
+    </div>
+  </section>
+
+  <style>
+    .photo { margin: 0 0 26px; border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; background: var(--panel); position: relative; }
+    .photo img { display: block; width: 100%; max-height: 560px; object-fit: cover; object-position: center 38%; }
+    .photo.no-img img { display: none; }
+    .ph-fallback { display: none; padding: 60px 24px; text-align: center; }
+    .photo.no-img .ph-fallback { display: block; }
+    .ph-fallback p { color: var(--muted); margin: 10px 0 0; font-size: 14px; }
+    .ph-fallback code { background: var(--panel-3); padding: 2px 7px; border-radius: 6px; font-size: 13px; color: var(--text); }
+    .photo figcaption { padding: 13px 18px; font-size: 13.5px; color: var(--muted); border-top: 1px solid var(--line); font-style: italic; background: var(--bg-2); }
+    .cm-grid { gap: 16px; margin-bottom: 22px; align-items: stretch; }
+    .cm-card { background: linear-gradient(180deg, var(--panel), var(--bg-2)); border: 1px solid var(--line); border-top: 3px solid var(--c); border-radius: var(--radius); padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+    .cm-top { display: flex; gap: 14px; align-items: center; }
+    .cm-av { width: 56px; height: 56px; border-radius: 14px; object-fit: cover; border: 2px solid var(--c); background: var(--panel-3); flex-shrink: 0; }
+    .cm-role { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+    .cm-name { font-family: var(--display); font-size: 21px; font-weight: 700; display: block; line-height: 1.15; }
+    .cm-name:hover { color: var(--c); }
+    .cm-handle { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+    .cm-blurb { font-size: 14px; line-height: 1.55; color: var(--text-2); flex: 1; margin: 0; }
+    .cm-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; border-top: 1px solid var(--line); padding-top: 14px; }
+    .cm-stats > div { text-align: center; }
+    .cm-stats .num { display: block; font-size: 19px; font-weight: 700; font-family: var(--display); color: var(--c); }
+    .cm-stats label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+    .tape { margin-bottom: 8px; }
+    .tape-head { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; font-family: var(--display); font-weight: 700; font-size: 15px; padding-bottom: 10px; margin-bottom: 6px; border-bottom: 1px solid var(--line); }
+    .tape-head span:first-child { text-align: right; }
+    .tape-row { display: grid; grid-template-columns: 1fr 1.1fr 1fr; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+    .tape-row:last-child { border-bottom: none; }
+    .tl { text-align: center; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    .tv { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 15px; color: var(--text-2); padding: 4px 10px; border-radius: 8px; }
+    .tv.left { text-align: right; }
+    .tv.right { text-align: left; }
+    .tv.win { color: var(--c); background: color-mix(in srgb, var(--c) 13%, transparent); font-weight: 800; }
+    .duties { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 26px; }
+    .duty { display: flex; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 15px 16px; }
+    .duty-i { font-size: 22px; flex-shrink: 0; }
+    .duty strong { font-size: 14.5px; }
+    .duty p { font-size: 12.5px; line-height: 1.45; margin: 4px 0 0; }
+    .callout { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap; background: linear-gradient(120deg, var(--accent-soft), var(--bg-2)); border: 1px solid var(--line-2); border-radius: var(--radius-lg); padding: 22px 24px; }
+    .callout strong { font-size: 16px; font-family: var(--display); }
+    .btn { background: var(--accent); color: #04140d; font-weight: 700; padding: 12px 20px; border-radius: 12px; white-space: nowrap; font-size: 14px; }
+    .btn:hover { filter: brightness(1.08); }
+  </style>
+</Base>
