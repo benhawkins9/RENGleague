@@ -34,6 +34,7 @@ export const records = league.records;
 export const vpRecords = league.vpRecords;
 export const faabRecords = league.faabRecords;
 export const auctionRecords = league.auctionRecords;
+export const trades = league.trades;
 export const draft = league.draft;
 export const topPlayerSeasons = league.topPlayerSeasons;
 

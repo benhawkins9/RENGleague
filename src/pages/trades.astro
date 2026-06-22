@@ -1,0 +1,124 @@
+---
+import Base from "../layouts/Base.astro";
+import PageHeader from "../components/PageHeader.astro";
+import StatCard from "../components/StatCard.astro";
+import RankBars from "../components/RankBars.astro";
+import ManagerChip from "../components/ManagerChip.astro";
+import { trades, managers, managerName, managerColor, fmt, ordinal } from "../lib/data.js";
+
+const traderBars = [...managers]
+  .filter((m) => m.allTime.trades > 0)
+  .sort((a, b) => b.allTime.trades - a.allTime.trades)
+  .map((m) => ({
+    name: m.name, value: m.allTime.trades, valueLabel: `${m.allTime.trades}`,
+    color: managerColor(m.id), href: `/managers/${m.id}`,
+    sub: `${m.allTime.trades} trade${m.allTime.trades !== 1 ? "s" : ""}`,
+  }));
+
+const totalTrades = trades.length;
+const mostActive = traderBars[0];
+const bySeason = {};
+for (const t of trades) bySeason[t.season] = (bySeason[t.season] || 0) + 1;
+const busiest = Object.entries(bySeason).sort((a, b) => b[1] - a[1])[0];
+const pickStr = (pk, ownerMid) =>
+  `${pk.season} ${ordinal(pk.round)}` + (pk.fromManager && pk.fromManager !== ownerMid ? ` · ${managerName(pk.fromManager)}` : "");
+---
+
+<Base active="trades" title="Trades" description="Every trade in RENG dynasty history — players, picks and FAAB.">
+  <PageHeader eyebrow="The trade block" title="Trades"
+    sub="Every deal in league history — players, draft picks and FAAB, both sides of the table. Dynasty is a contact sport." />
+
+  <section class="section-sm">
+    <div class="wrap">
+      <div class="grid cols-3" style="margin-bottom:22px">
+        <StatCard label="Total trades" value={totalTrades} accent="accent" icon="🔄" sub="all-time, all seasons" />
+        <StatCard label="Most active" value={mostActive.value} accent="purple" icon="📞" sub={`${mostActive.name} — never stops dealing`} />
+        <StatCard label="Busiest season" value={busiest[1]} unit="trades" accent="orange" icon="🔥" sub={`${busiest[0]} season`} />
+      </div>
+
+      <div class="grid cols-2" style="align-items:start">
+        <div class="panel panel-pad">
+          <h3 style="font-size:16px;margin-bottom:4px">📞 Most Active Traders</h3>
+          <p class="dim" style="font-size:12px;margin:0 0 16px">Total trades made (each deal counts for both teams).</p>
+          <RankBars items={traderBars} />
+        </div>
+
+        <div class="panel panel-pad">
+          <h3 style="font-size:16px;margin-bottom:4px">📊 Trades by Season</h3>
+          <p class="dim" style="font-size:12px;margin:0 0 16px">Deal volume each year.</p>
+          <div class="season-bars">
+            {Object.entries(bySeason).sort((a, b) => a[0].localeCompare(b[0])).map(([s, n]) => (
+              <div class="sb-row">
+                <span class="num sb-yr">{s}</span>
+                <span class="sb-track"><span style={`width:${(n / busiest[1]) * 100}%`}></span></span>
+                <span class="num sb-n">{n}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- trade feed -->
+  <section class="section-sm" style="padding-bottom:40px">
+    <div class="wrap">
+      <div class="row between" style="margin-bottom:16px">
+        <h2 class="section-title" style="font-size:clamp(20px,3vw,26px)">📜 The Full Feed</h2>
+        <span class="chip">{totalTrades} deals · newest first</span>
+      </div>
+      <div class="feed">
+        {trades.map((t) => (
+          <div class="trade">
+            <div class="t-meta">
+              <span class="num t-szn">{t.season}</span><span class="dim">· Wk {t.week}</span>
+              {t.date && <span class="dim">· {t.date}</span>}
+              {t.sides.length > 2 && <span class="chip" style="margin-left:auto">{t.sides.length}-team</span>}
+            </div>
+            <div class={`t-sides ${t.sides.length === 2 ? "two" : "many"}`}>
+              {t.sides.map((s) => (
+                <div class="t-side" style={`--c:${managerColor(s.managerId)}`}>
+                  <div class="t-who"><ManagerChip id={s.managerId} size={24} /><span class="t-gets">receives</span></div>
+                  <div class="t-assets">
+                    {s.playerNames.length === 0 && s.picks.length === 0 && !s.faab && <span class="dim" style="font-size:12.5px">future considerations</span>}
+                    {s.playerNames.map((p) => (
+                      <span class="t-asset"><b>{p.name}</b>{p.pos && <span class={`tag-pos pos-${p.pos}`}>{p.pos}</span>}</span>
+                    ))}
+                    {s.picks.map((pk) => (<span class="t-asset t-pick">🎟 {pickStr(pk, s.managerId)}</span>))}
+                    {s.faab > 0 && <span class="t-asset t-faab">${s.faab} FAAB</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <style>
+    .season-bars { display: flex; flex-direction: column; gap: 11px; }
+    .sb-row { display: grid; grid-template-columns: 42px 1fr 28px; align-items: center; gap: 10px; }
+    .sb-yr { font-size: 13px; font-weight: 600; color: var(--muted); }
+    .sb-track { height: 9px; background: var(--panel-3); border-radius: 999px; overflow: hidden; }
+    .sb-track span { display: block; height: 100%; background: var(--accent-2); border-radius: 999px; }
+    .sb-n { font-size: 13px; font-weight: 700; text-align: right; }
+
+    .feed { display: flex; flex-direction: column; gap: 12px; }
+    .trade { background: linear-gradient(180deg, var(--panel), var(--bg-2)); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+    .t-meta { display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-family: var(--display); margin-bottom: 12px; }
+    .t-szn { font-weight: 700; }
+    .t-sides { display: grid; gap: 12px; }
+    .t-sides.two { grid-template-columns: 1fr 1fr; }
+    .t-sides.many { grid-template-columns: 1fr; }
+    .t-side { background: var(--bg-2); border: 1px solid var(--line); border-left: 3px solid var(--c); border-radius: var(--radius-sm); padding: 11px 13px; }
+    .t-who { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 9px; }
+    .t-gets { font-size: 9.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--faint); font-weight: 700; }
+    .t-assets { display: flex; flex-wrap: wrap; gap: 6px; }
+    .t-asset { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; background: var(--panel); border: 1px solid var(--line); padding: 3px 8px; border-radius: 6px; }
+    .t-asset b { font-weight: 600; }
+    .t-pick { color: var(--accent-2); border-color: rgba(84,166,255,.25); }
+    .t-faab { color: var(--orange); border-color: rgba(255,159,69,.25); font-weight: 700; }
+    @media (max-width: 560px) { .t-sides.two { grid-template-columns: 1fr; } }
+  </style>
+</Base>

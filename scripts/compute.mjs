@@ -68,7 +68,8 @@ const allTimeWeekly = [];   // regular-season weeks only, for raw scoring record
 const h2h = {};
 const playerSeasonPoints = {};
 const allWaiverAdds = [];   // {season, managerId, playerId, faab, week} for FAAB records
-const txByManager = {};     // managerId -> {faabSpent, waiverClaims, faAdds, biggestBid}
+const txByManager = {};     // managerId -> {faabSpent, waiverClaims, faAdds, biggestBid, trades}
+const allTrades = [];       // {season, week, created, sides:[{managerId, players, picks, faab}]}
 
 const pairKey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 
@@ -273,11 +274,29 @@ for (const season of SEASONS) {
 
   const txAll = Object.values(transactions).flat();
   let tradeCount = 0;
+  const initTx = (mid) => (txByManager[mid] ||= { faabSpent: 0, waiverClaims: 0, faAdds: 0, biggestBid: 0, trades: 0 });
   for (const tx of txAll) {
-    if (tx.type === "trade") { tradeCount++; continue; }
+    if (tx.type === "trade") {
+      if (tx.status && tx.status !== "complete") continue;
+      tradeCount++;
+      const sides = (tx.roster_ids || []).map((rid) => {
+        const mid = rosterToManager[rid];
+        if (mid) initTx(mid).trades++;
+        const playersIn = [];
+        for (const [pid, toR] of Object.entries(tx.adds || {})) if (toR === rid) { referencedPlayers.add(pid); playersIn.push(pid); }
+        const picksIn = (tx.draft_picks || [])
+          .filter((dp) => dp.owner_id === rid && dp.previous_owner_id !== rid)
+          .map((dp) => ({ season: dp.season, round: dp.round, fromManager: rosterToManager[dp.roster_id] || null }));
+        let faabIn = 0;
+        for (const wb of tx.waiver_budget || []) if (wb.receiver === rid) faabIn += wb.amount || 0;
+        return { rosterId: rid, managerId: mid, players: playersIn, picks: picksIn, faab: faabIn };
+      });
+      allTrades.push({ season, week: tx.leg, created: tx.created || tx.status_updated || 0, sides });
+      continue;
+    }
     const mid = rosterToManager[(tx.roster_ids || [])[0]];
     if (!mid) continue;
-    const e = (txByManager[mid] ||= { faabSpent: 0, waiverClaims: 0, faAdds: 0, biggestBid: 0 });
+    const e = initTx(mid);
     if (tx.type === "waiver" && tx.status === "complete") {
       const bid = tx.settings?.waiver_bid ?? 0;
       e.faabSpent += bid; e.waiverClaims++; e.biggestBid = Math.max(e.biggestBid, bid);
@@ -360,7 +379,7 @@ const managerList = Object.values(managers).map((m) => {
       bestSeed: at.bestSeed === 99 ? null : at.bestSeed,
       bestFinish: at.bestSeed === 99 ? null : at.bestSeed,
       finishes: at.finishes || {}, playoffResults: at.playoffResults || {}, luck: round(at.luck || 0, 2),
-      faabSpent: tx.faabSpent || 0, waiverClaims: tx.waiverClaims || 0, faAdds: tx.faAdds || 0, biggestBid: tx.biggestBid || 0,
+      faabSpent: tx.faabSpent || 0, waiverClaims: tx.waiverClaims || 0, faAdds: tx.faAdds || 0, biggestBid: tx.biggestBid || 0, trades: tx.trades || 0,
     },
   };
 });
@@ -428,6 +447,14 @@ const faabRecords = {
   totalClaims: allWaiverAdds.length,
 };
 
+// ---- Trades ----
+for (const t of allTrades) {
+  t.date = t.created ? new Date(t.created).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null;
+  for (const s of t.sides)
+    s.playerNames = s.players.map((pid) => ({ id: pid, name: players[pid]?.name || pid, pos: players[pid]?.pos || null }));
+}
+const trades = [...allTrades].sort((a, b) => (b.created || 0) - (a.created || 0));
+
 // ---- Auction (startup) records ----
 let auctionRecords = null;
 const auctionSeason = SEASONS.find((s) => seasonsOut[s].draftType === "auction");
@@ -468,7 +495,7 @@ const league = {
   managers: managerList,
   seasons: seasonsOut,
   allTime: { standings: managerList.filter((m) => m.allTime.seasons > 0).sort((a, b) => b.allTime.titles - a.allTime.titles || b.allTime.winPct - a.allTime.winPct || b.allTime.pf - a.allTime.pf) },
-  headToHead: h2hList, records, vpRecords, faabRecords, auctionRecords, draft: draftAnalysis, topPlayerSeasons,
+  headToHead: h2hList, records, vpRecords, faabRecords, auctionRecords, trades, draft: draftAnalysis, topPlayerSeasons,
 };
 
 writeFileSync(join(OUT, "league.json"), JSON.stringify(league));

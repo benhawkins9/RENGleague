@@ -34,13 +34,12 @@ for (const s of completedSeasons)
 // leaderboards
 const vpBars = [...allTimeStandings]
   .sort((a, b) => b.allTime.vp - a.allTime.vp)
-  .slice(0, 6)
   .map((m) => ({
     name: m.name, value: m.allTime.vp, valueLabel: `${m.allTime.vp} VP`,
     color: managerColor(m.id), href: `/managers/${m.id}`,
     sub: `${record(m.allTime.w, m.allTime.l, m.allTime.t)} · ${pct(m.allTime.winPct)} win`,
   }));
-const allPlayBars = [...allTimeStandings].sort((a, b) => b.allTime.allPlayPct - a.allTime.allPlayPct).slice(0, 6).map((m) => ({
+const allPlayBars = [...allTimeStandings].sort((a, b) => b.allTime.allPlayPct - a.allTime.allPlayPct).map((m) => ({
   name: m.name, value: m.allTime.allPlayPct, valueLabel: pct(m.allTime.allPlayPct),
   color: managerColor(m.id), href: `/managers/${m.id}`, sub: "vs. the entire field, every week",
 }));

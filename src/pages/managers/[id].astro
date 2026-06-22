@@ -138,7 +138,7 @@ const resultFor = (season, seed) => {
         )}
         <hr class="divider" style="margin:14px 0" />
         <div class="h2h-mini">
-          {[...myPairs].sort((x,y)=> (y.myWins+y.oppWins) - (x.myWins+x.oppWins)).slice(0,6).map((p) => (
+          {[...myPairs].sort((x,y)=> (y.myWins+y.oppWins) - (x.myWins+x.oppWins)).map((p) => (
             <div class="mini-row">
               <ManagerChip id={p.oppId} size={24} />
               <span class="num" style={`color:${p.myWins>p.oppWins?"var(--accent)":p.myWins<p.oppWins?"var(--hot)":"var(--muted)"}`}>{p.myWins}-{p.oppWins}</span>

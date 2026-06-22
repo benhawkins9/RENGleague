@@ -12,7 +12,6 @@ const A = auctionRecords;
 // FAAB spending leaderboard
 const faabLeaders = [...allTimeStandings]
   .sort((a, b) => b.allTime.faabSpent - a.allTime.faabSpent)
-  .slice(0, 10)
   .map((m) => ({
     name: m.name, value: m.allTime.faabSpent, valueLabel: "$" + fmt(m.allTime.faabSpent),
     color: managerColor(m.id), href: `/managers/${m.id}`,
