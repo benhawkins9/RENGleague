@@ -1,0 +1,246 @@
+---
+import Base from "../layouts/Base.astro";
+import PageHeader from "../components/PageHeader.astro";
+import ManagerChip from "../components/ManagerChip.astro";
+import {
+  seasons, completedSeasons, getManager, managerColor, avatarUrl, fmt, signed, record,
+} from "../lib/data.js";
+
+const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
+const stdev = (a) => { if (a.length < 2) return 0; const m = avg(a); return Math.sqrt(avg(a.map((x) => (x - m) ** 2))); };
+const r1 = (n) => Math.round(n * 10) / 10;
+
+// ---- Schedule-swap matrix per season ----
+const swap = {};
+for (const s of completedSeasons) {
+  const st = seasons[s].standings;
+  const mgrs = st.map((r) => ({ id: r.managerId, name: r.teamName, color: managerColor(r.managerId), avatar: avatarUrl(getManager(r.managerId)?.avatar) }));
+  const pts = {}, opp = {};
+  for (const r of st) { pts[r.managerId] = {}; opp[r.managerId] = {}; for (const w of r.weekly) { pts[r.managerId][w.week] = w.points; opp[r.managerId][w.week] = w.oppPoints; } }
+  const weeks = st[0].weekly.map((w) => w.week);
+  const matrix = {};
+  for (const a of mgrs) {
+    matrix[a.id] = {};
+    for (const x of mgrs) {
+      let w = 0, l = 0;
+      for (const wk of weeks) { const ap = pts[a.id][wk], of = opp[x.id][wk]; if (ap == null || of == null) continue; if (ap > of) w++; else if (ap < of) l++; }
+      matrix[a.id][x.id] = { w, l };
+    }
+  }
+  swap[s] = { managers: mgrs, matrix, weeks: weeks.length };
+}
+
+// ---- Bench hall of shame ----
+const bench = [];
+for (const s of completedSeasons) for (const r of seasons[s].standings) for (const w of r.weekly)
+  if (w.optimal != null) bench.push({ season: s, week: w.week, managerId: r.managerId, teamName: r.teamName, left: r1(w.optimal - w.points), points: w.points, optimal: w.optimal, result: w.result });
+bench.sort((a, b) => b.left - a.left);
+const benchTop = bench.slice(0, 8);
+
+// ---- Coin-flip (one-score, <10pt) record all-time ----
+const coin = {};
+for (const s of completedSeasons) for (const r of seasons[s].standings) for (const w of r.weekly) {
+  if (w.oppPoints == null || w.result === "T") continue;
+  if (Math.abs(w.points - w.oppPoints) < 10) { const c = (coin[r.managerId] ||= { id: r.managerId, w: 0, l: 0 }); w.result === "W" ? c.w++ : c.l++; }
+}
+const coinList = Object.values(coin).map((c) => ({ ...c, g: c.w + c.l, pct: c.w / (c.w + c.l || 1) })).filter((c) => c.g >= 4).sort((a, b) => b.pct - a.pct);
+
+// ---- Luck swings (single seasons) ----
+const luckSeasons = [];
+for (const s of completedSeasons) for (const r of seasons[s].standings)
+  luckSeasons.push({ season: s, managerId: r.managerId, teamName: r.teamName, luck: r.luck, w: r.w, l: r.l, allPlayW: r.allPlayW, allPlayL: r.allPlayL });
+const luckiest = [...luckSeasons].sort((a, b) => b.luck - a.luck).slice(0, 5);
+const unluckiest = [...luckSeasons].sort((a, b) => a.luck - b.luck).slice(0, 5);
+
+// ---- Boom or bust (all-time weekly volatility) ----
+const vol = {};
+for (const s of completedSeasons) for (const r of seasons[s].standings) for (const w of r.weekly)
+  (vol[r.managerId] ||= { id: r.managerId, pts: [] }).pts.push(w.points);
+const volList = Object.values(vol).map((v) => ({ id: v.id, mean: r1(avg(v.pts)), sd: r1(stdev(v.pts)) })).sort((a, b) => b.sd - a.sd);
+const defaultSeason = completedSeasons[completedSeasons.length - 1];
+---
+
+<Base active="labs" title="Labs" description="Experimental fantasy stats: schedule-swap what-ifs, bench shame, coin-flip luck, boom or bust.">
+  <PageHeader eyebrow="The fun stuff" title="The Labs" sub="The experiments that settle arguments — and start new ones. Built from the same play-by-play data." />
+
+  <!-- ===== SCHEDULE SWAP MACHINE ===== -->
+  <section class="section-sm">
+    <div class="wrap">
+      <div class="panel panel-pad">
+        <div class="row between wrap-gap"><h3 style="font-size:19px">🔀 The Schedule-Swap Machine</h3>
+          <div class="seasonsel" id="swap-seasons">
+            {completedSeasons.slice().reverse().map((s) => (<button class={`mini-tab${s === defaultSeason ? " on" : ""}`} data-s={s}>{s}</button>))}
+          </div>
+        </div>
+        <p class="dim" style="font-size:13px;margin:8px 0 16px;max-width:70ch">
+          Fantasy's cruelest truth: half of winning is who you were booked against. Pick a manager — we replay their exact weekly scores against
+          <i>every other manager's schedule</i> to reveal how much the bracket gods helped or robbed them.
+        </p>
+        <div class="mgr-picker" id="swap-pick"></div>
+        <div id="swap-result" class="swap-result"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="wrap grid cols-2" style="margin-top:4px">
+    <!-- ===== BENCH HALL OF SHAME ===== -->
+    <div class="panel panel-pad">
+      <h3 style="font-size:18px;margin-bottom:4px">🪑 Bench Hall of Shame</h3>
+      <p class="dim" style="font-size:12.5px;margin:0 0 14px">Most fantasy points left rotting on the bench in a single week.</p>
+      {benchTop.map((b, i) => (
+        <div class="shame-row">
+          <span class="num idx">{i + 1}</span>
+          <div style="flex:1;min-width:0"><ManagerChip id={b.managerId} name={b.teamName} size={26} sub={`${b.season} · Wk ${b.week} · ${b.result === "W" ? "won anyway" : "and lost 💀"}`} /></div>
+          <span class="num shame-pts">-{fmt(b.left, 1)}</span>
+        </div>
+      ))}
+    </div>
+
+    <!-- ===== COIN FLIP KINGS ===== -->
+    <div class="panel panel-pad">
+      <h3 style="font-size:18px;margin-bottom:4px">🪙 Coin-Flip Kings</h3>
+      <p class="dim" style="font-size:12.5px;margin:0 0 14px">Record in one-score games (decided by &lt; 10 pts). Clutch, or just lucky?</p>
+      {coinList.map((c, i) => (
+        <div class="shame-row">
+          <span class="num idx">{i + 1}</span>
+          <div style="flex:1;min-width:0"><ManagerChip id={c.id} size={26} sub={`${c.g} nail-biters`} /></div>
+          <span class="num" style="font-weight:700">{c.w}-{c.l}</span>
+          <span class="coin-bar"><span style={`width:${c.pct * 100}%;background:${c.pct >= .5 ? "var(--accent)" : "var(--hot)"}`}></span></span>
+        </div>
+      ))}
+    </div>
+  </div>
+
+  <div class="wrap grid cols-2" style="margin-top:18px">
+    <!-- ===== LUCK REPORT ===== -->
+    <div class="panel panel-pad">
+      <h3 style="font-size:18px;margin-bottom:4px">🍀 The Luck Report</h3>
+      <p class="dim" style="font-size:12.5px;margin:0 0 14px">Single seasons where record and reality diverged most.</p>
+      <p class="eyebrow" style="color:var(--purple)">Heaven's children (won way more than deserved)</p>
+      {luckiest.map((s) => (
+        <div class="luck-row">
+          <ManagerChip id={s.managerId} name={s.teamName} size={24} sub={`${s.season} · went ${record(s.w, s.l)} on a ${s.allPlayW}-${s.allPlayL} all-play`} />
+          <span class="num pos" style="font-weight:700">{signed(s.luck)}</span>
+        </div>
+      ))}
+      <p class="eyebrow" style="color:var(--hot);margin-top:14px">Snakebit (robbed by the schedule)</p>
+      {unluckiest.map((s) => (
+        <div class="luck-row">
+          <ManagerChip id={s.managerId} name={s.teamName} size={24} sub={`${s.season} · went ${record(s.w, s.l)} on a ${s.allPlayW}-${s.allPlayL} all-play`} />
+          <span class="num neg" style="font-weight:700">{signed(s.luck)}</span>
+        </div>
+      ))}
+    </div>
+
+    <!-- ===== BOOM OR BUST ===== -->
+    <div class="panel panel-pad">
+      <h3 style="font-size:18px;margin-bottom:4px">🎢 Boom or Bust</h3>
+      <p class="dim" style="font-size:12.5px;margin:0 0 16px">Week-to-week volatility (std. dev of weekly score). Big swings up top, metronomes at the bottom.</p>
+      {volList.map((v, i) => {
+        const max = volList[0].sd;
+        return (
+          <div class="vol-row">
+            <div style="min-width:0;flex:1"><ManagerChip id={v.id} size={24} sub={`avg ${v.mean}/wk`} /></div>
+            <span class="vol-track"><span style={`width:${(v.sd / max) * 100}%;background:${managerColor(v.id)}`}></span></span>
+            <span class="num" style="font-weight:700;width:42px;text-align:right">±{v.sd}</span>
+          </div>
+        );
+      })}
+      <p class="dim" style="font-size:11.5px;margin-top:12px">Higher = boom-or-bust. Lower = Mr. Consistent.</p>
+    </div>
+  </div>
+
+  <p class="wrap dim" style="font-size:12px;margin-top:24px;padding-bottom:20px">
+    🧪 Every number here is reverse-engineered from weekly scores and optimal-lineup math — no playoff bracket exists in this league's data, so these are the truest measures of who actually had it.
+  </p>
+
+  <script is:inline define:vars={{ swap, defaultSeason }}>
+    const elPick = document.getElementById("swap-pick");
+    const elResult = document.getElementById("swap-result");
+    const elSeasons = document.getElementById("swap-seasons");
+    let season = defaultSeason;
+    let pick = swap[season].managers[0].id;
+
+    function rec(o) { return `${o.w}-${o.l}`; }
+    function renderPick() {
+      const ms = swap[season].managers;
+      elPick.innerHTML = ms.map((m) =>
+        `<button class="mbtn${m.id === pick ? " on" : ""}" data-id="${m.id}" style="--c:${m.color}" title="${m.name}">
+           ${m.avatar ? `<img src="${m.avatar}" alt="">` : `<span class="fb">${m.name.charAt(0)}</span>`}
+         </button>`).join("");
+      elPick.querySelectorAll(".mbtn").forEach((b) => b.onclick = () => { pick = b.dataset.id; renderPick(); renderResult(); });
+    }
+    function renderResult() {
+      const data = swap[season];
+      const me = data.managers.find((m) => m.id === pick);
+      const rows = data.managers.map((x) => ({ x, r: data.matrix[pick][x.id] })).map((o) => ({ ...o, wins: o.r.w }));
+      rows.sort((a, b) => b.wins - a.wins);
+      const actual = data.matrix[pick][pick];
+      const best = rows[0], worst = rows[rows.length - 1];
+      const maxW = data.weeks;
+      const head = `
+        <div class="swap-head">
+          <div class="sh-card"><label>Actual record</label><span class="num">${rec(actual)}</span><em>their real schedule</em></div>
+          <div class="sh-card good"><label>Easiest schedule</label><span class="num">${rec(best.r)}</span><em>if they had ${best.x.id === pick ? "their own" : best.x.name + "'s"}</em></div>
+          <div class="sh-card bad"><label>Toughest schedule</label><span class="num">${rec(worst.r)}</span><em>if they had ${worst.x.name}'s</em></div>
+        </div>`;
+      const list = rows.map((o) => {
+        const isSelf = o.x.id === pick;
+        const w = (o.r.w / maxW) * 100;
+        return `<div class="swap-row${isSelf ? " self" : ""}">
+          <span class="sr-name">${o.x.name}${isSelf ? ' <span class="selftag">actual</span>' : ""}</span>
+          <span class="sr-track"><span style="width:${w}%;background:${isSelf ? "var(--gold)" : o.x.color}"></span></span>
+          <span class="num sr-rec">${rec(o.r)}</span>
+        </div>`;
+      }).join("");
+      elResult.innerHTML = `<div class="sr-title">Replaying <b style="color:${me.color}">${me.name}</b>'s ${season} scores against all 12 schedules</div>${head}<div class="swap-list">${list}</div>`;
+    }
+    elSeasons.querySelectorAll(".mini-tab").forEach((t) => t.onclick = () => {
+      season = t.dataset.s; pick = swap[season].managers[0].id;
+      elSeasons.querySelectorAll(".mini-tab").forEach((x) => x.classList.toggle("on", x === t));
+      renderPick(); renderResult();
+    });
+    renderPick(); renderResult();
+  </script>
+
+  <style is:global>
+    /* is:global because the schedule-swap UI is injected via innerHTML at runtime;
+       Astro scoped styles only attach to build-time elements. Class names are page-unique. */
+    .seasonsel { display: flex; gap: 5px; }
+    .mini-tab { font-family: var(--display); font-weight: 600; font-size: 13px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); cursor: pointer; }
+    .mini-tab.on { background: var(--accent); color: #04221a; border-color: transparent; }
+    .mgr-picker { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+    .mbtn { width: 44px; height: 44px; border-radius: 11px; overflow: hidden; padding: 0; cursor: pointer; background: var(--panel-3); border: 2px solid transparent; transition: transform .12s, border-color .12s; }
+    .mbtn img { width: 100%; height: 100%; object-fit: cover; }
+    .mbtn .fb { font-family: var(--display); font-weight: 700; color: var(--c); display: grid; place-items: center; height: 100%; }
+    .mbtn:hover { transform: translateY(-2px); }
+    .mbtn.on { border-color: var(--c); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 22%, transparent); }
+    .sr-title { font-size: 14px; color: var(--muted); margin-bottom: 14px; }
+    .swap-head { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
+    .sh-card { background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 2px; }
+    .sh-card label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+    .sh-card .num { font-size: 28px; font-weight: 700; }
+    .sh-card em { font-size: 11.5px; color: var(--faint); font-style: normal; }
+    .sh-card.good { border-color: rgba(46,230,166,.3); } .sh-card.good .num { color: var(--accent); }
+    .sh-card.bad { border-color: rgba(255,93,108,.3); } .sh-card.bad .num { color: var(--hot); }
+    .swap-list { display: flex; flex-direction: column; gap: 8px; }
+    .swap-row { display: grid; grid-template-columns: 1fr 130px 46px; align-items: center; gap: 12px; }
+    .swap-row.self { background: var(--gold-soft); border-radius: 8px; padding: 2px 8px; margin: 0 -8px; }
+    .sr-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .selftag { font-size: 9.5px; background: var(--gold); color: #2a1d00; padding: 1px 5px; border-radius: 4px; font-weight: 700; }
+    .sr-track { height: 8px; background: var(--panel-3); border-radius: 999px; overflow: hidden; }
+    .sr-track span { display: block; height: 100%; border-radius: 999px; }
+    .sr-rec { font-size: 13px; font-weight: 700; text-align: right; }
+    .shame-row { display: flex; align-items: center; gap: 11px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+    .shame-row:last-child { border: none; }
+    .idx { color: var(--faint); font-weight: 700; width: 16px; font-size: 13px; }
+    .shame-pts { color: var(--hot); font-weight: 700; font-size: 16px; }
+    .coin-bar { width: 54px; height: 7px; background: var(--panel-3); border-radius: 999px; overflow: hidden; flex-shrink: 0; }
+    .coin-bar span { display: block; height: 100%; }
+    .luck-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; }
+    .vol-row { display: flex; align-items: center; gap: 11px; padding: 6px 0; }
+    .vol-track { flex: 1; height: 8px; background: var(--panel-3); border-radius: 999px; overflow: hidden; max-width: 160px; }
+    .vol-track span { display: block; height: 100%; border-radius: 999px; }
+    @media (max-width: 720px) { .swap-head { grid-template-columns: 1fr; } .swap-row { grid-template-columns: 1fr 80px 42px; } }
+  </style>
+</Base>

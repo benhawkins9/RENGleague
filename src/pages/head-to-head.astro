@@ -1,0 +1,227 @@
+---
+import Base from "../layouts/Base.astro";
+import PageHeader from "../components/PageHeader.astro";
+import ManagerChip from "../components/ManagerChip.astro";
+import {
+  headToHead, allTimeStandings,
+  getManager, managerName, avatarUrl, fmt,
+} from "../lib/data.js";
+
+// Lookup keyed by `${id1}|${id2}` (sorted, a<b) -> headToHead record.
+const h2h = {};
+for (const rec of headToHead) h2h[`${rec.a}|${rec.b}`] = rec;
+const key = (x, y) => (x < y ? `${x}|${y}` : `${y}|${x}`);
+
+// Managers in all-time order = matrix rows/columns.
+const order = allTimeStandings;
+
+// Orient a meeting to row R's perspective vs column C.
+function meeting(rId, cId) {
+  const rec = h2h[key(rId, cId)];
+  if (!rec) return null;
+  if (rId < cId) return { rWins: rec.aWins, cWins: rec.bWins, ties: rec.ties, rPf: rec.aPf, cPf: rec.bPf, games: rec.games };
+  return { rWins: rec.bWins, cWins: rec.aWins, ties: rec.ties, rPf: rec.bPf, cPf: rec.aPf, games: rec.games };
+}
+
+const tri = (name) => (name || "").slice(0, 3);
+
+// ---- HIGHLIGHTS ----
+// Fiercest rivalries: most games, tie-broken by closest split (smallest |aWins-bWins|).
+const fiercest = [...headToHead]
+  .sort((x, y) => y.games - x.games || Math.abs(x.aWins - x.bWins) - Math.abs(y.aWins - y.bWins))
+  .slice(0, 5);
+
+// Most lopsided: games>=4, largest |aWins-bWins|.
+const lopsided = [...headToHead]
+  .filter((p) => p.games >= 4)
+  .sort((x, y) => Math.abs(y.aWins - y.bWins) - Math.abs(x.aWins - x.bWins))
+  .slice(0, 5);
+
+// For a pair, resolve winner/loser ids + their record (winner-loser).
+function pairResult(p) {
+  if (p.aWins >= p.bWins)
+    return { winnerId: p.a, loserId: p.b, wWins: p.aWins, lWins: p.bWins };
+  return { winnerId: p.b, loserId: p.a, wWins: p.bWins, lWins: p.aWins };
+}
+---
+
+<Base active="h2h" description="All-time head-to-head matchups between every manager in the league.">
+  <PageHeader
+    eyebrow="Who owns who"
+    title="Head-to-Head"
+    sub="Every all-time matchup between the 12 managers. Read across your row — green means you own them."
+  />
+
+  <!-- THE MATRIX -->
+  <section class="section-sm" style="padding-top:8px">
+    <div class="wrap">
+      <div class="panel panel-pad">
+        <div style="overflow-x:auto">
+          <table class="tbl h2h">
+            <thead>
+              <tr>
+                <th class="corner">vs</th>
+                {order.map((c) => {
+                  const m = getManager(c.id);
+                  const av = avatarUrl(m?.avatar);
+                  return (
+                    <th class="colh" title={c.name}>
+                      <span class="colav">
+                        {av
+                          ? <img src={av} alt={c.name} loading="lazy" />
+                          : <span class="colav-fb">{tri(c.name)}</span>}
+                      </span>
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {order.map((r) => (
+                <tr>
+                  <th class="rowh"><ManagerChip id={r.id} size={26} /></th>
+                  {order.map((c) => {
+                    if (r.id === c.id)
+                      return <td class="cell blocked"><span class="dim">—</span></td>;
+                    const mt = meeting(r.id, c.id);
+                    if (!mt)
+                      return <td class="cell"><span class="faint">·</span></td>;
+                    const cls = mt.rWins > mt.cWins ? "win" : mt.rWins < mt.cWins ? "loss" : "even";
+                    const title = `${r.name} vs ${c.name}: ${mt.rWins}-${mt.cWins}, PF ${fmt(mt.rPf, 1)}-${fmt(mt.cPf, 1)}`;
+                    return (
+                      <td class={`cell ${cls}`} title={title}>
+                        <span class="num rec">{mt.rWins}-{mt.cWins}</span>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p class="dim" style="font-size:12.5px;margin-top:12px">
+        Each cell shows the row manager's all-time record against the column manager.
+        <span style="color:var(--accent)">Green</span> = winning record,
+        <span style="color:var(--hot)">red</span> = losing record. Hover any cell for points-for splits.
+      </p>
+    </div>
+  </section>
+
+  <!-- HIGHLIGHTS -->
+  <section class="section-sm">
+    <div class="wrap grid cols-2">
+      <!-- Fiercest rivalries -->
+      <div class="panel panel-pad">
+        <h3 style="font-size:18px;margin-bottom:4px">🔥 Fiercest Rivalries</h3>
+        <p class="dim" style="font-size:12.5px;margin:0 0 14px">Most meetings, closest splits — the games that actually matter.</p>
+        <div class="hl-list">
+          {fiercest.map((p) => {
+            const res = pairResult(p);
+            return (
+              <div class="hl-row">
+                <div class="hl-pair">
+                  <ManagerChip id={p.a} size={26} />
+                  <span class="hl-vs faint">vs</span>
+                  <ManagerChip id={p.b} size={26} />
+                </div>
+                <div class="hl-meta">
+                  <span class="num hl-rec">{p.aWins}-{p.bWins}{p.ties ? `-${p.ties}` : ""}</span>
+                  <span class="hl-games dim">{p.games} games</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <!-- Most lopsided -->
+      <div class="panel panel-pad">
+        <h3 style="font-size:18px;margin-bottom:4px">🪓 Most Lopsided</h3>
+        <p class="dim" style="font-size:12.5px;margin:0 0 14px">At least four meetings — and one manager has the other's number.</p>
+        <div class="hl-list">
+          {lopsided.map((p) => {
+            const res = pairResult(p);
+            return (
+              <div class="hl-row">
+                <div class="hl-pair lop">
+                  <span class="lop-text">
+                    <strong style="color:var(--accent)">{managerName(res.winnerId)}</strong>
+                    <span class="dim"> owns </span>
+                    <strong>{managerName(res.loserId)}</strong>
+                  </span>
+                </div>
+                <div class="hl-meta">
+                  <span class="num hl-rec pos">{res.wWins}-{res.lWins}</span>
+                  <span class="hl-games dim">{p.games} games</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <style>
+    /* ---- matrix ---- */
+    table.h2h { border-collapse: separate; border-spacing: 0; }
+    table.h2h th, table.h2h td { border-bottom: none; }
+
+    table.h2h th.corner {
+      position: sticky; left: 0; z-index: 3;
+      background: var(--panel-2); color: var(--faint);
+      font-size: 11px; text-align: center; padding: 8px 10px;
+      border-bottom: 1px solid var(--line-2);
+    }
+    table.h2h th.colh {
+      padding: 6px 4px; text-align: center; vertical-align: bottom;
+      border-bottom: 1px solid var(--line-2);
+    }
+    .colav {
+      width: 26px; height: 26px; border-radius: 7px; overflow: hidden;
+      display: inline-grid; place-items: center; margin: 0 auto;
+      background: var(--panel-3); border: 1px solid var(--line);
+    }
+    .colav img { width: 100%; height: 100%; object-fit: cover; }
+    .colav-fb { font-family: var(--display); font-weight: 700; font-size: 9px; color: var(--muted); text-transform: uppercase; }
+
+    table.h2h th.rowh {
+      position: sticky; left: 0; z-index: 2;
+      background: var(--panel-2); padding: 6px 14px 6px 6px;
+      border-right: 1px solid var(--line-2); white-space: nowrap;
+      text-transform: none; letter-spacing: normal;
+    }
+
+    table.h2h td.cell {
+      padding: 6px 8px; text-align: center; min-width: 50px;
+      border-bottom: 1px solid var(--line);
+      border-left: 1px solid rgba(255,255,255,.03);
+    }
+    .cell .rec { font-size: 13px; font-weight: 600; }
+    .cell.win { background: rgba(46,230,166,.10); }
+    .cell.win .rec { color: var(--accent); }
+    .cell.loss { background: rgba(255,93,108,.10); }
+    .cell.loss .rec { color: var(--hot); }
+    .cell.even .rec { color: var(--text); }
+    .cell.blocked { background: rgba(255,255,255,.02); }
+    table.h2h tbody tr:hover td.cell { background: rgba(255,255,255,.04); }
+    table.h2h tbody tr:hover td.cell.win { background: rgba(46,230,166,.16); }
+    table.h2h tbody tr:hover td.cell.loss { background: rgba(255,93,108,.16); }
+
+    /* ---- highlights ---- */
+    .hl-list { display: flex; flex-direction: column; }
+    .hl-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 11px 0; border-bottom: 1px solid var(--line);
+    }
+    .hl-row:last-child { border-bottom: none; }
+    .hl-pair { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .hl-vs { font-size: 11.5px; }
+    .hl-pair.lop { gap: 0; }
+    .lop-text { font-size: 14px; }
+    .hl-meta { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; line-height: 1.2; }
+    .hl-rec { font-size: 15px; font-weight: 700; }
+    .hl-games { font-size: 11.5px; }
+  </style>
+</Base>

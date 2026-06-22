@@ -1,0 +1,19 @@
+{
+  "name": "fantasy-football-hub",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A data-rich website for the 'Regular Everday Normal Guys' Sleeper dynasty league",
+  "scripts": {
+    "fetch": "node scripts/fetch-data.mjs",
+    "compute": "node scripts/compute.mjs",
+    "data": "node scripts/fetch-data.mjs && node scripts/compute.mjs",
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "astro": "^7.0.0",
+    "qrcode": "^1.5.4"
+  }
+}

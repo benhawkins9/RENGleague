@@ -1,0 +1,219 @@
+---
+import Base from "../layouts/Base.astro";
+import PageHeader from "../components/PageHeader.astro";
+import ManagerChip from "../components/ManagerChip.astro";
+import { records, topPlayerSeasons, player, fmt } from "../lib/data.js";
+
+// Single best/worst single-week scores
+const topWeeks = records.topWeeks.slice(0, 10);
+const worstWeeks = records.worstWeeks.slice(0, 10);
+
+// Margin records
+const blowouts = records.biggestBlowouts.slice(0, 10);
+const nailbiters = records.closestGames.slice(0, 10);
+const highLosses = records.highestScoringLoss.slice(0, 10);
+const lowWins = records.lowestScoringWin.slice(0, 10);
+
+// Best individual fantasy seasons, resolved to player info
+const playerSeasons = topPlayerSeasons.map((s) => ({ ...s, ...player(s.playerId) }));
+---
+
+<Base active="records" title="The Record Book" description="The single best and worst performances in four seasons of league history — highest weeks, biggest blowouts, nailbiters, and the best individual player seasons ever.">
+  <PageHeader
+    eyebrow="Etched in stone"
+    title="The Record Book"
+    sub="The single best — and worst — performances in four seasons of league history."
+  />
+
+  <!-- LEADERBOARD PANELS -->
+  <section class="section-sm">
+    <div class="wrap">
+      <div class="grid cols-2">
+
+        <!-- Highest-scoring weeks -->
+        <div class="panel panel-pad">
+          <h3 class="lb-title">🔥 Highest-Scoring Weeks</h3>
+          <p class="dim lb-cap">The biggest single-week explosions in league history.</p>
+          <ol class="lb">
+            {topWeeks.map((it, i) => (
+              <li class="lb-row">
+                <span class="num faint lb-rank">{i + 1}</span>
+                <ManagerChip id={it.managerId} name={it.teamName} size={28} />
+                <span class="chip dim lb-meta num">{it.season} · Wk {it.week}</span>
+                <span class="num lb-pts pos">{fmt(it.points, 1)}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        <!-- Lowest-scoring weeks -->
+        <div class="panel panel-pad">
+          <h3 class="lb-title">🧊 Lowest-Scoring Weeks</h3>
+          <p class="dim lb-cap">The cold snaps nobody wants on their permanent record.</p>
+          <ol class="lb">
+            {worstWeeks.map((it, i) => (
+              <li class="lb-row">
+                <span class="num faint lb-rank">{i + 1}</span>
+                <ManagerChip id={it.managerId} name={it.teamName} size={28} />
+                <span class="chip dim lb-meta num">{it.season} · Wk {it.week}</span>
+                <span class="num lb-pts neg">{fmt(it.points, 1)}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        <!-- Biggest blowouts -->
+        <div class="panel panel-pad">
+          <h3 class="lb-title">💥 Biggest Blowouts</h3>
+          <p class="dim lb-cap">Statement wins. The most lopsided beatdowns on record.</p>
+          <ol class="lb">
+            {blowouts.map((it, i) => (
+              <li class="lb-row">
+                <span class="num faint lb-rank">{i + 1}</span>
+                <ManagerChip id={it.managerId} name={it.teamName} size={28}
+                  sub={`${it.season} · Wk ${it.week} · beat ${fmt(it.oppPoints, 1)}`} />
+                <span class="num lb-pts hot">+{fmt(it.margin, 1)}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        <!-- Closest wins -->
+        <div class="panel panel-pad">
+          <h3 class="lb-title">😬 Closest Wins</h3>
+          <p class="dim lb-cap">Nail-biters decided by a hair — the smallest margins ever.</p>
+          <ol class="lb">
+            {nailbiters.map((it, i) => (
+              <li class="lb-row">
+                <span class="num faint lb-rank">{i + 1}</span>
+                <ManagerChip id={it.managerId} name={it.teamName} size={28}
+                  sub={`${it.season} · Wk ${it.week} · edged ${fmt(it.oppPoints, 1)}`} />
+                <span class="num lb-pts lb-margin gold">{fmt(it.margin, 2)}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        <!-- Highest-scoring losses -->
+        <div class="panel panel-pad">
+          <h3 class="lb-title">💔 Highest-Scoring Losses</h3>
+          <p class="dim lb-cap">Hung a monster number… and somehow still lost.</p>
+          <ol class="lb">
+            {highLosses.map((it, i) => (
+              <li class="lb-row">
+                <span class="num faint lb-rank">{i + 1}</span>
+                <ManagerChip id={it.managerId} name={it.teamName} size={28}
+                  sub={`${it.season} · Wk ${it.week} · lost to ${fmt(it.oppPoints, 1)}`} />
+                <span class="lb-still">
+                  <span class="num lb-pts neg">{fmt(it.points, 1)}</span>
+                  <span class="faint lb-still-lbl">and still lost</span>
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        <!-- Lowest-scoring wins -->
+        <div class="panel panel-pad">
+          <h3 class="lb-title">🍀 Lowest-Scoring Wins</h3>
+          <p class="dim lb-cap">Backed into a W on the league's quietest scoreboards.</p>
+          <ol class="lb">
+            {lowWins.map((it, i) => (
+              <li class="lb-row">
+                <span class="num faint lb-rank">{i + 1}</span>
+                <ManagerChip id={it.managerId} name={it.teamName} size={28}
+                  sub={`${it.season} · Wk ${it.week} · vs ${fmt(it.oppPoints, 1)}`} />
+                <span class="lb-still">
+                  <span class="num lb-pts pos">{fmt(it.points, 1)}</span>
+                  <span class="faint lb-still-lbl">to win</span>
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- BEST INDIVIDUAL PLAYER SEASONS -->
+  <section class="section-sm">
+    <div class="wrap">
+      <div class="eyebrow">Single-season greatness</div>
+      <h2 class="section-title" style="font-size:clamp(22px,3vw,30px);margin:6px 0 6px">👑 Best Individual Player Seasons</h2>
+      <p class="dim" style="font-size:12.5px;margin:0 0 16px">
+        Fantasy points scored within <em style="font-style:normal;color:var(--text)">this</em> league's scoring settings — superflex, 0.5 PPR.
+      </p>
+      <div class="panel" style="overflow:hidden">
+        <div class="tbl-scroll">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th style="width:48px">Rank</th>
+                <th>Player</th>
+                <th>Team</th>
+                <th>Season</th>
+                <th class="td-num">League Pts</th>
+              </tr>
+            </thead>
+            <tbody>
+              {playerSeasons.map((p, i) => (
+                <tr>
+                  <td class="td-num faint">{i + 1}</td>
+                  <td>
+                    <span class="pl-cell">
+                      <span class="pl-name">{p.name}</span>
+                      {p.pos && <span class={`tag-pos pos-${p.pos}`}>{p.pos}</span>}
+                    </span>
+                  </td>
+                  <td class="dim">{p.team ?? "—"}</td>
+                  <td class="num dim">{p.season}</td>
+                  <td class="td-num pos" style="font-weight:700">{fmt(p.points, 1)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <style>
+    /* leaderboard panels */
+    .lb-title { font-size: 18px; }
+    .lb-cap { font-size: 12.5px; margin: 6px 0 16px; }
+    .lb { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+    .lb-row {
+      display: grid;
+      grid-template-columns: 20px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 11px;
+      padding: 9px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .lb-row:last-child { border-bottom: none; }
+    .lb-rank { font-size: 13px; font-weight: 700; text-align: right; }
+    /* a few rows carry a middle meta-chip; let it sit between chip and points */
+    .lb-meta {
+      justify-self: end;
+      font-size: 11px;
+      padding: 2px 8px;
+      white-space: nowrap;
+    }
+    .lb-row:has(.lb-meta) { grid-template-columns: 20px minmax(0, 1fr) auto auto; }
+    .lb-pts { font-size: 19px; font-weight: 700; text-align: right; white-space: nowrap; }
+    .lb-margin { font-size: 16px; }
+    .lb-still { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
+    .lb-still-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; margin-top: 2px; white-space: nowrap; }
+
+    /* player-season table */
+    .tbl-scroll { overflow-x: auto; }
+    .pl-cell { display: inline-flex; align-items: center; gap: 8px; }
+    .pl-name { font-weight: 600; }
+
+    @media (max-width: 620px) {
+      .lb-meta { display: none; }
+      .lb-row:has(.lb-meta) { grid-template-columns: 20px minmax(0, 1fr) auto; }
+    }
+  </style>
+</Base>

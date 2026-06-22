@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.astro/
+# Raw API dumps are large + re-fetchable; keep them out of git.
+data/raw/
+*.log
+.DS_Store
+.vercel

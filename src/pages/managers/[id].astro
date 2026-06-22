@@ -1,0 +1,219 @@
+---
+import Base from "../../layouts/Base.astro";
+import StatCard from "../../components/StatCard.astro";
+import ManagerChip from "../../components/ManagerChip.astro";
+import {
+  managers, seasons, completedSeasons, headToHead, draft,
+  getManager, managerName, managerColor, avatarUrl, fmt, pct, signed, record, ordinal,
+} from "../../lib/data.js";
+
+export function getStaticPaths() {
+  return managers.map((m) => ({ params: { id: m.id }, props: { id: m.id } }));
+}
+const { id } = Astro.props;
+const m = getManager(id);
+const color = managerColor(id);
+const av = avatarUrl(m.avatar, false);
+const a = m.allTime;
+
+// season-by-season rows
+const seasonRows = completedSeasons
+  .map((s) => ({ season: s, row: seasons[s].standings.find((r) => r.managerId === id) }))
+  .filter((x) => x.row);
+
+// personal weekly performances
+const allWeeks = [];
+for (const { season, row } of seasonRows)
+  for (const w of row.weekly) allWeeks.push({ season, ...w });
+const bestWeeks = [...allWeeks].sort((x, y) => y.points - x.points).slice(0, 3);
+const worstWeeks = [...allWeeks].sort((x, y) => x.points - y.points).slice(0, 3);
+
+// head-to-head
+const myPairs = headToHead.filter((p) => p.a === id || p.b === id).map((p) => {
+  const meFirst = p.a === id;
+  const oppId = meFirst ? p.b : p.a;
+  return {
+    oppId,
+    myWins: meFirst ? p.aWins : p.bWins,
+    oppWins: meFirst ? p.bWins : p.aWins,
+    ties: p.ties,
+    myPf: meFirst ? p.aPf : p.bPf,
+    oppPf: meFirst ? p.bPf : p.aPf,
+    games: p.games,
+  };
+});
+const h2hTot = myPairs.reduce((acc, p) => ({ w: acc.w + p.myWins, l: acc.l + p.oppWins, t: acc.t + p.ties }), { w: 0, l: 0, t: 0 });
+const ranked = [...myPairs].filter((p) => p.games >= 2);
+const owns = [...ranked].sort((x, y) => (y.myWins - y.oppWins) - (x.myWins - x.oppWins))[0];
+const ownedBy = [...ranked].sort((x, y) => (x.myWins - x.oppWins) - (y.myWins - y.oppWins))[0];
+
+// drafts
+const mySteals = draft.steals.filter((d) => d.managerId === id).slice(0, 4);
+const myBusts = draft.busts.filter((d) => d.managerId === id).slice(0, 4);
+
+// Playoff result per season (champion / runner-up / final 4 / play-in / missed)
+const resultFor = (season, seed) => {
+  const r = a.playoffResults[season];
+  if (r === "champion") return { t: "🏆 Champion", c: "chip gold" };
+  if (r === "runner-up") return { t: "Runner-up", c: "chip blue" };
+  if (r === "finalist") return { t: "Final Four", c: "chip accent" };
+  if (seed <= 6) return { t: "Play-in", c: "chip" };
+  return { t: "Missed", c: "dim" };
+};
+---
+
+<Base active="managers" title={m.name} description={`Career stats and history for ${m.name}.`}>
+  <section class="mgr-hero" style={`--c:${color}`}>
+    <div class="wrap hero-grid">
+      <div class="hero-av">{av ? <img src={av} alt={m.name} /> : <span class="fb">{m.name.charAt(0)}</span>}</div>
+      <div>
+        <a href="/managers" class="dim" style="font-size:13px">← All managers</a>
+        <h1 class="mgr-name">{m.name}</h1>
+        <p class="dim" style="margin:4px 0 0">@{m.displayName} · {a.seasons} seasons played</p>
+        <div class="row wrap-gap" style="margin-top:14px;gap:7px">
+          {a.titles > 0 && <span class="chip gold">🏆 {a.titles}× Champion</span>}
+          {a.runnerUps > 0 && <span class="chip blue">🥈 {a.runnerUps}× Runner-up</span>}
+          {a.pointsTitles > 0 && <span class="chip accent">📈 {a.pointsTitles}× Points King</span>}
+          {a.bestSeed && <span class="chip">Best seed: {ordinal(a.bestSeed)}</span>}
+          {a.lastPlace > 0 && <span class="chip hot">💩 {a.lastPlace}× last in VP</span>}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section-sm">
+    <div class="wrap">
+      <div class="grid cols-4">
+        <StatCard label="All-time record" value={record(a.w, a.l, a.t)} accent="accent" sub={`${pct(a.winPct)} win rate`} />
+        <StatCard label="True power" value={pct(a.allPlayPct)} accent="blue" icon="🏋️" sub="All-play win %" />
+        <StatCard label="Lineup efficiency" value={fmt(a.efficiency, 1)} unit="%" accent="orange" icon="🎯" sub="Pts ÷ optimal lineup" />
+        <StatCard label="Career luck" value={signed(a.luck)} accent={a.luck >= 0 ? "purple" : "hot"} icon={a.luck >= 0 ? "🍀" : "🐍"} sub="Wins above/below deserved" />
+      </div>
+    </div>
+  </section>
+
+  <section class="section-sm">
+    <div class="wrap grid cols-2">
+      <!-- season history -->
+      <div class="panel panel-pad">
+        <h3 style="font-size:16px;margin-bottom:14px">📅 Season by Season</h3>
+        <table class="tbl">
+          <thead><tr><th>Yr</th><th class="td-num">VP</th><th class="td-center">Seed</th><th>Playoffs</th><th>Record</th><th class="td-num">PF</th><th class="td-num">Eff</th><th class="td-num">Luck</th></tr></thead>
+          <tbody>
+            {seasonRows.map(({ season, row }) => {
+              const res = resultFor(season, row.seed);
+              return (
+              <tr>
+                <td class="num" style="font-weight:600">{season}</td>
+                <td class="td-num num" style="font-weight:700;color:var(--accent)">{row.vp}</td>
+                <td class="td-center num" style={row.seed <= 2 ? "color:var(--gold);font-weight:700" : row.seed <= 6 ? "font-weight:600" : "color:var(--faint)"}>{row.seed}</td>
+                <td>{res.c === "dim" ? <span class="dim" style="font-size:12px">{res.t}</span> : <span class={res.c} style="font-size:11px">{res.t}</span>}</td>
+                <td class="num">{record(row.w, row.l, row.t)}</td>
+                <td class="td-num">{fmt(row.pf)}</td>
+                <td class="td-num">{fmt(row.efficiency, 0)}%</td>
+                <td class="td-num"><span class={row.luck > 0.5 ? "pos" : row.luck < -0.5 ? "neg" : "dim"}>{signed(row.luck)}</span></td>
+              </tr>
+            );})}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- rivalries -->
+      <div class="panel panel-pad">
+        <h3 style="font-size:16px;margin-bottom:4px">⚔️ Rivalries</h3>
+        <p class="dim" style="font-size:12.5px;margin:0 0 14px">All-time vs the field: <b class="num" style="color:var(--text)">{record(h2hTot.w, h2hTot.l, h2hTot.t)}</b></p>
+        {owns && (
+          <div class="rival">
+            <span class="rival-tag pos">OWNS</span>
+            <ManagerChip id={owns.oppId} size={28} />
+            <span class="num rival-rec">{owns.myWins}-{owns.oppWins}{owns.ties ? "-" + owns.ties : ""}</span>
+          </div>
+        )}
+        {ownedBy && ownedBy.oppId !== (owns && owns.oppId) && (
+          <div class="rival">
+            <span class="rival-tag neg">OWNED BY</span>
+            <ManagerChip id={ownedBy.oppId} size={28} />
+            <span class="num rival-rec">{ownedBy.myWins}-{ownedBy.oppWins}{ownedBy.ties ? "-" + ownedBy.ties : ""}</span>
+          </div>
+        )}
+        <hr class="divider" style="margin:14px 0" />
+        <div class="h2h-mini">
+          {[...myPairs].sort((x,y)=> (y.myWins+y.oppWins) - (x.myWins+x.oppWins)).slice(0,6).map((p) => (
+            <div class="mini-row">
+              <ManagerChip id={p.oppId} size={24} />
+              <span class="num" style={`color:${p.myWins>p.oppWins?"var(--accent)":p.myWins<p.oppWins?"var(--hot)":"var(--muted)"}`}>{p.myWins}-{p.oppWins}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section-sm">
+    <div class="wrap grid cols-2">
+      <div class="panel panel-pad">
+        <h3 style="font-size:16px;margin-bottom:14px">🔥 Personal Best Weeks</h3>
+        {bestWeeks.map((w) => (
+          <div class="wk-row">
+            <span class="num wk-pts pos">{fmt(w.points, 1)}</span>
+            <span class="dim" style="font-size:13px">{w.season} · Wk {w.week} {w.oppPoints != null && <span>vs {fmt(w.oppPoints, 0)} · {w.result === "W" ? "W" : "L"}</span>}</span>
+          </div>
+        ))}
+        <h3 style="font-size:16px;margin:20px 0 14px">🧊 Rough Outings</h3>
+        {worstWeeks.map((w) => (
+          <div class="wk-row">
+            <span class="num wk-pts neg">{fmt(w.points, 1)}</span>
+            <span class="dim" style="font-size:13px">{w.season} · Wk {w.week}</span>
+          </div>
+        ))}
+      </div>
+      <div class="panel panel-pad">
+        <h3 style="font-size:16px;margin-bottom:14px">🎯 Draft Legacy</h3>
+        {mySteals.length > 0 ? (
+          <>
+            <p class="eyebrow" style="color:var(--accent)">Steals</p>
+            {mySteals.map((d) => (
+              <div class="draft-row">
+                <span><b>{d.name}</b> <span class={`tag-pos pos-${d.pos}`}>{d.pos}</span></span>
+                <span class="dim num" style="font-size:12px">{d.season} R{d.round} #{d.pickNo} · <b style="color:var(--accent)">{fmt(d.careerPoints)}</b> pts</span>
+              </div>
+            ))}
+          </>
+        ) : <p class="dim" style="font-size:13px">No standout steals on record.</p>}
+        {myBusts.length > 0 && (
+          <>
+            <p class="eyebrow" style="color:var(--hot);margin-top:16px">Busts</p>
+            {myBusts.map((d) => (
+              <div class="draft-row">
+                <span><b>{d.name}</b> <span class={`tag-pos pos-${d.pos}`}>{d.pos}</span></span>
+                <span class="dim num" style="font-size:12px">{d.season} R{d.round} #{d.pickNo} · {fmt(d.careerPoints)} pts</span>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    </div>
+  </section>
+
+  <style>
+    .mgr-hero { padding: 40px 0 24px; border-bottom: 1px solid var(--line); background: linear-gradient(180deg, color-mix(in srgb, var(--c) 9%, var(--bg)), var(--bg)); }
+    .hero-grid { display: flex; gap: 24px; align-items: center; }
+    .hero-av { width: 96px; height: 96px; border-radius: 18px; overflow: hidden; flex-shrink: 0; display: grid; place-items: center;
+      background: var(--panel-3); box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--c) 45%, transparent), var(--shadow); }
+    .hero-av img { width: 100%; height: 100%; object-fit: cover; }
+    .hero-av .fb { font-family: var(--display); font-weight: 700; font-size: 40px; color: var(--c); }
+    .mgr-name { font-size: clamp(30px, 6vw, 48px); margin-top: 6px; }
+    .rival { display: flex; align-items: center; gap: 11px; padding: 9px 0; }
+    .rival-tag { font-size: 10px; font-weight: 700; font-family: var(--display); letter-spacing: .05em; width: 74px; }
+    .rival-rec { margin-left: auto; font-weight: 700; font-size: 15px; }
+    .h2h-mini { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; }
+    .mini-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .mini-row .num { font-weight: 700; font-size: 13px; }
+    .wk-row { display: flex; align-items: baseline; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+    .wk-row:last-child { border: none; }
+    .wk-pts { font-size: 20px; font-weight: 700; width: 64px; }
+    .draft-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+    .draft-row:last-child { border: none; }
+    @media (max-width: 620px) { .hero-grid { flex-direction: column; text-align: center; align-items: flex-start; } }
+  </style>
+</Base>

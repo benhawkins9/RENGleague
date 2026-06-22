@@ -1,0 +1,39 @@
+---
+// Horizontal ranked bars. items: [{ name, value, valueLabel, color, sub, href }]
+const { items = [], suffix = "", max: maxProp } = Astro.props;
+const max = maxProp ?? Math.max(...items.map((i) => Math.abs(i.value)), 1);
+---
+<div class="rankbars">
+  {items.map((it, i) => {
+    const w = Math.max(2, (Math.abs(it.value) / max) * 100);
+    const Tag = it.href ? "a" : "div";
+    return (
+      <Tag href={it.href} class="rb-row">
+        <span class="rb-rank num">{i + 1}</span>
+        <span class="rb-main">
+          <span class="rb-label">
+            <span class="rb-name">{it.name}</span>
+            <span class="rb-val num">{it.valueLabel ?? it.value}{suffix}</span>
+          </span>
+          <span class="rb-track">
+            <span class="rb-fill" style={`width:${w}%;background:${it.color || "var(--accent)"}`}></span>
+          </span>
+          {it.sub && <span class="rb-sub">{it.sub}</span>}
+        </span>
+      </Tag>
+    );
+  })}
+</div>
+<style>
+  .rankbars { display: flex; flex-direction: column; gap: 13px; }
+  .rb-row { display: grid; grid-template-columns: 22px 1fr; gap: 11px; align-items: start; }
+  a.rb-row:hover .rb-name { color: var(--text); }
+  .rb-rank { color: var(--faint); font-weight: 700; font-size: 14px; text-align: right; padding-top: 1px; }
+  .rb-main { min-width: 0; }
+  .rb-label { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; margin-bottom: 5px; }
+  .rb-name { font-size: 13.5px; font-weight: 600; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color .15s; }
+  .rb-val { font-size: 13.5px; font-weight: 700; color: var(--text); flex-shrink: 0; }
+  .rb-track { display: block; height: 8px; background: var(--panel-3); border-radius: 999px; overflow: hidden; }
+  .rb-fill { display: block; height: 100%; border-radius: 999px; transition: width .5s ease; }
+  .rb-sub { font-size: 11.5px; color: var(--faint); margin-top: 4px; display: block; }
+</style>

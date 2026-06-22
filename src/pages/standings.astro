@@ -1,0 +1,187 @@
+---
+import Base from "../layouts/Base.astro";
+import PageHeader from "../components/PageHeader.astro";
+import StatCard from "../components/StatCard.astro";
+import ManagerChip from "../components/ManagerChip.astro";
+import { seasons, completedSeasons, managerColor, fmt, pct, signed, record } from "../lib/data.js";
+
+const order = [...completedSeasons].reverse();
+const defaultSeason = order[0];
+
+function highlights(s) {
+  const st = seasons[s].standings;
+  return {
+    champ: seasons[s].champion,
+    seed1: st[0],
+    king: seasons[s].pointsKing,
+    luckiest: [...st].sort((a, b) => b.luck - a.luck)[0],
+    unluckiest: [...st].sort((a, b) => a.luck - b.luck)[0],
+  };
+}
+---
+
+<Base active="standings" title="Standings" description="Victory Points standings with seeding, all-play, luck index and lineup efficiency.">
+  <PageHeader
+    eyebrow="Season by season"
+    title="Victory Points Standings"
+    sub="Seeding is set by Victory Points — +2 for the head-to-head win, plus a scoring bonus (top-4 = +2, middle-4 = +1). Max 4 VP a week."
+  >
+    <div class="season-tabs" role="tablist">
+      {order.map((s) => (<button class={`stab${s === defaultSeason ? " is-active" : ""}`} data-season={s}>{s}</button>))}
+      <span class="chip" style="margin-left:auto">2026 · preseason — <a href="/draft" style="color:var(--accent)">see the draft →</a></span>
+    </div>
+  </PageHeader>
+
+  {order.map((s) => {
+    const st = seasons[s].standings;
+    const h = highlights(s);
+    return (
+      <section class="season-panel" data-season={s} style={s === defaultSeason ? "" : "display:none"}>
+        <div class="wrap">
+          <div class="grid cols-4" style="margin-bottom:20px">
+            <StatCard label="🏆 Champion" value="🏆" accent="gold"
+              info="Winner of the 2-week cumulative-score final — not necessarily the top seed."
+              sub={`${h.champ.teamName} · #${h.champ.seed} seed → ${fmt(h.champ.total)} finals pts`} />
+            <StatCard label="VP #1 Seed" value={h.seed1.vp} unit="VP" accent="accent" icon="🥇"
+              info="Victory Points: +2 for the weekly H2H win, plus a scoring bonus (top-4 +2, middle-4 +1). Most VP earns the #1 seed and a bye."
+              sub={`${h.seed1.teamName} · earned the bye`} />
+            <StatCard label="Points King" value={fmt(h.king.pf)} accent="blue" icon="📈"
+              info="Most total points scored across the 14-week regular season." sub={h.king.teamName} />
+            <StatCard label="Most snakebit" value={signed(h.unluckiest.luck)} accent="hot" icon="🐍"
+              info="Luck = actual wins minus expected wins (from all-play). Most negative = deserved more wins than the schedule gave them."
+              sub={`${h.unluckiest.teamName} · ${record(h.unluckiest.w, h.unluckiest.l)} on a ${h.unluckiest.allPlayW}-${h.unluckiest.allPlayL} all-play`} />
+          </div>
+
+          <div class="panel" style="overflow:hidden">
+            <div style="overflow-x:auto">
+              <table class="tbl vp-table">
+                <thead>
+                  <tr>
+                    <th style="width:46px">Seed</th>
+                    <th>Team</th>
+                    <th class="td-num">VP</th>
+                    <th class="td-num">Rec</th>
+                    <th class="td-center">Form</th>
+                    <th class="td-num">PF</th>
+                    <th class="td-num">All-Play</th>
+                    <th class="td-num">Eff%</th>
+                    <th class="td-num">Luck</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {st.map((r) => (
+                    <tr class={r.seed === 6 ? "cutoff" : ""}>
+                      <td>
+                        <span class={`seedcell ${r.seed <= 2 ? "bye" : r.seed <= 6 ? "po" : "out"}`}>
+                          <span class="num">{r.seed}</span>
+                          {r.seed <= 2 && <span class="seedtag">BYE</span>}
+                        </span>
+                      </td>
+                      <td><ManagerChip id={r.managerId} name={r.teamName} size={30} /></td>
+                      <td class="td-num">
+                        <span class="vp-num num" title={`Head-to-head ${r.vpH2H} + Scoring ${r.vpScore}`}>{r.vp}</span>
+                        <span class="vp-split num">{r.vpH2H}<span class="dim">·h</span> {r.vpScore}<span class="dim">·s</span></span>
+                      </td>
+                      <td class="num" style="font-weight:600">{record(r.w, r.l, r.t)}</td>
+                      <td>
+                        <span class="form">
+                          {r.weekly.map((w) => (<span class={`pip ${w.result === "W" ? "w" : w.result === "L" ? "l" : "t"}`} title={`Wk ${w.week}: ${w.points} vs ${w.oppPoints} · ${w.result} · ${w.vp} VP`}></span>))}
+                        </span>
+                      </td>
+                      <td class="td-num" style="font-weight:600">{fmt(r.pf)}</td>
+                      <td class="td-num"><span class="dim num">{r.allPlayW}-{r.allPlayL}</span> <span class="ap-pct num">{pct(r.allPlayPct, 0)}</span></td>
+                      <td class="td-num">{fmt(r.efficiency, 1)}</td>
+                      <td class="td-num"><span class={r.luck > 0.5 ? "pos" : r.luck < -0.5 ? "neg" : "dim"} style="font-weight:700">{signed(r.luck)}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div class="po-key">
+              <span><span class="dot bye"></span> Seeds 1–2 — first-round bye</span>
+              <span><span class="dot po"></span> Seeds 3–6 — Week-15 shootout (top 2 advance)</span>
+              <span><span class="dot out"></span> Seeds 7–12 — eliminated</span>
+              <a href="/hall" style="margin-left:auto;color:var(--accent)">See the playoff bracket →</a>
+            </div>
+          </div>
+
+          <div class="grid cols-2" style="margin-top:20px">
+            <div class="panel panel-pad legend">
+              <h3 style="font-size:15px;margin-bottom:12px">📐 How to read this</h3>
+              <ul>
+                <li><b>VP</b> — Victory Points. Each week: <b class="pos">+2</b> for the H2H win and a scoring bonus (<b>top-4 +2</b>, <b>mid-4 +1</b>). The <span class="num">·h</span>/<span class="num">·s</span> split shows how much came from winning vs. scoring.</li>
+                <li><b>All-Play</b> — your record if you played <i>every</i> team every week. The truest talent measure.</li>
+                <li><b>Eff%</b> — points ÷ your best possible lineup. Low % = points rotting on the bench.</li>
+                <li><b>Luck</b> — actual wins vs. expected wins. <span class="pos">Green</span> = won more than deserved; <span class="neg">red</span> = robbed.</li>
+              </ul>
+            </div>
+            <div class="panel panel-pad">
+              <h3 style="font-size:15px;margin-bottom:6px">🏋️ Power Ranking</h3>
+              <p class="dim" style="font-size:12px;margin:0 0 14px">Blends all-play %, scoring, and late-season form — pure talent, ignores VP luck.</p>
+              <ol class="power-list">
+                {seasons[s].power.slice(0, 12).map((p, i) => (
+                  <li>
+                    <span class="num pr-rank" style={`color:${i < 3 ? "var(--gold)" : "var(--faint)"}`}>{i + 1}</span>
+                    <span class="pr-name">{p.teamName}</span>
+                    <span class="pr-bar"><span style={`width:${p.powerScore}%;background:${managerColor(p.managerId)}`}></span></span>
+                    <span class="num pr-score">{p.powerScore}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  })}
+
+  <script is:inline>
+    const tabs = document.querySelectorAll(".stab");
+    const panels = document.querySelectorAll(".season-panel");
+    tabs.forEach((t) => t.addEventListener("click", () => {
+      const s = t.dataset.season;
+      tabs.forEach((x) => x.classList.toggle("is-active", x === t));
+      panels.forEach((p) => (p.style.display = p.dataset.season === s ? "" : "none"));
+    }));
+  </script>
+
+  <style>
+    .season-tabs { display: flex; align-items: center; gap: 6px; margin-top: 20px; flex-wrap: wrap; }
+    .stab { font-family: var(--display); font-weight: 600; font-size: 15px; padding: 7px 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); cursor: pointer; transition: all .15s; }
+    .stab:hover { color: var(--text); }
+    .stab.is-active { background: var(--accent); color: #04221a; border-color: transparent; }
+    .season-panel { padding: 8px 0 40px; }
+
+    .seedcell { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; padding-left: 8px; border-left: 3px solid transparent; }
+    .seedcell.bye { border-left-color: var(--gold); }
+    .seedcell.po { border-left-color: var(--accent); }
+    .seedcell.out { border-left-color: transparent; color: var(--faint); }
+    .seedtag { font-size: 8.5px; font-weight: 700; background: var(--gold-soft); color: var(--gold); padding: 1px 4px; border-radius: 4px; letter-spacing: .04em; }
+    tr.cutoff td { border-bottom: 2px solid var(--line-2); }
+
+    .vp-num { font-size: 17px; font-weight: 700; color: var(--accent); }
+    .vp-split { display: block; font-size: 10px; color: var(--muted); margin-top: 1px; }
+    .ap-pct { color: var(--accent-2); font-weight: 700; margin-left: 4px; }
+    .form { display: inline-flex; gap: 2px; }
+    .pip { width: 7px; height: 14px; border-radius: 2px; background: var(--panel-3); }
+    .pip.w { background: var(--accent); }
+    .pip.l { background: var(--hot); opacity: .8; }
+    .pip.t { background: var(--muted); }
+
+    .po-key { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; padding: 12px 16px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+    .po-key .dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+    .dot.bye { background: var(--gold); } .dot.po { background: var(--accent); } .dot.out { background: var(--panel-3); }
+
+    .legend ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 9px; }
+    .legend li { font-size: 13px; color: var(--muted); line-height: 1.5; }
+    .legend b { color: var(--text); }
+    .power-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+    .power-list li { display: grid; grid-template-columns: 20px 1fr 90px 38px; align-items: center; gap: 10px; }
+    .pr-rank { font-weight: 700; text-align: right; font-size: 13px; }
+    .pr-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pr-bar { height: 7px; background: var(--panel-3); border-radius: 999px; overflow: hidden; }
+    .pr-bar span { display: block; height: 100%; border-radius: 999px; }
+    .pr-score { font-size: 13px; font-weight: 700; text-align: right; }
+    @media (max-width: 720px) { .power-list li { grid-template-columns: 18px 1fr 50px 32px; } }
+  </style>
+</Base>

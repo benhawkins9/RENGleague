@@ -1,0 +1,46 @@
+name: Weekly VP Update
+
+# Recomputes Victory Points from the Sleeper API every Tuesday during the NFL
+# season (after Monday Night Football finalizes the prior week's scores), commits
+# the refreshed data, and pushes — which triggers a Vercel production redeploy.
+on:
+  schedule:
+    # 13:00 UTC ≈ 8am ET, Tuesdays, Sep–Jan (covers reg season wks 1-14 + playoffs)
+    - cron: "0 13 * 9-12,1 2"
+  workflow_dispatch: {} # allow manual "Run workflow" from the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: weekly-vp-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Fetch scores + recompute Victory Points
+        run: npm run data
+
+      - name: Commit refreshed data (if changed)
+        run: |
+          git config user.name "RENG League Bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add src/data/league.json src/data/players.json
+          if git diff --staged --quiet; then
+            echo "No data changes this week."
+          else
+            git commit -m "chore: weekly VP update ($(date -u +'%Y-%m-%d'))"
+            git push
+            echo "Pushed updated VP data — Vercel will redeploy."
+          fi

@@ -1,0 +1,100 @@
+---
+import Base from "../layouts/Base.astro";
+import PageHeader from "../components/PageHeader.astro";
+import QRCode from "qrcode";
+import { dues } from "../dues.config.js";
+
+const amt = dues.amount;
+const qr = (url, dark) => QRCode.toString(url, { type: "svg", margin: 1, color: { dark, light: "#ffffff" } });
+
+const venmoUrl = dues.venmo
+  ? `https://venmo.com/?txn=pay&recipients=${dues.venmo}&amount=${amt}&note=${encodeURIComponent(dues.note)}`
+  : null;
+const cashUrl = dues.cashapp ? `https://cash.app/$${dues.cashapp}/${amt}` : null;
+
+const methods = [
+  { name: "Venmo", color: "#008CFF", handle: dues.venmo && "@" + dues.venmo, url: venmoUrl,
+    qr: venmoUrl ? await qr(venmoUrl, "#0a2540") : null, cta: "Open in Venmo" },
+  { name: "Cash App", color: "#00D632", handle: dues.cashapp && "$" + dues.cashapp, url: cashUrl,
+    qr: cashUrl ? await qr(cashUrl, "#0a2e16") : null, cta: "Open in Cash App" },
+];
+const anyConfigured = methods.some((m) => m.qr);
+---
+
+<Base active="dues" title="League Dues" description={`Pay your ${dues.season} ${dues.note} via Venmo or Cash App.`}>
+  <PageHeader eyebrow={`${dues.season} Season`} title="League Dues"
+    sub={`$${amt} per team, due ${dues.dueBy}. Scan a code or tap to pay ${dues.collector} — and put "${dues.note}" in the memo.`} />
+
+  <section class="section-sm">
+    <div class="wrap">
+      {!anyConfigured && (
+        <div class="panel panel-pad setup-note">
+          ⚙️ <b>Commissioner:</b> add your Venmo username and/or Cash App $cashtag in
+          <code>src/dues.config.js</code>, then redeploy. QR codes and pay buttons generate automatically.
+        </div>
+      )}
+      <div class="grid cols-2">
+        {methods.map((m) => (
+          <div class="pay" style={`--c:${m.color}`}>
+            <div class="pay-head">
+              <span class="pay-name">{m.name}</span>
+              <span class="pay-amt num">${amt}</span>
+            </div>
+            {m.qr ? (
+              <>
+                <div class="qr" set:html={m.qr} />
+                <div class="pay-handle num">{m.handle}</div>
+                <a href={m.url} class="pay-btn" target="_blank" rel="noopener">{m.cta} →</a>
+                <p class="pay-tip dim">Scan with your phone camera, or tap the button on your phone.</p>
+              </>
+            ) : (
+              <div class="pay-todo">
+                <span style="font-size:30px">📱</span>
+                <p>{m.name} link coming soon.</p>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="section-sm" style="padding-bottom:40px">
+    <div class="wrap">
+      <div class="panel panel-pad dues-info">
+        <h3 style="font-size:16px;margin-bottom:8px">💸 The fine print</h3>
+        <ul>
+          <li>Buy-in is <b>${amt}</b> for the {dues.season} season, due <b>{dues.dueBy}</b>.</li>
+          <li>Put <b>"{dues.note}"</b> in the payment memo so {dues.collector} can reconcile who's paid.</li>
+          <li>Questions on payout structure? Hit up the commish in the group chat.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <style>
+    .setup-note { font-size: 13.5px; color: var(--muted); margin-bottom: 18px; border-color: rgba(255,207,74,.3); }
+    .setup-note code, .dues-info code { background: var(--panel-3); padding: 1px 6px; border-radius: 5px; font-size: 12.5px; color: var(--accent); }
+    .pay {
+      background: linear-gradient(180deg, var(--panel), var(--bg-2)); border: 1px solid var(--line);
+      border-top: 3px solid var(--c); border-radius: var(--radius); padding: 22px; text-align: center;
+      display: flex; flex-direction: column; align-items: center; gap: 14px;
+    }
+    .pay-head { display: flex; align-items: baseline; justify-content: space-between; width: 100%; }
+    .pay-name { font-family: var(--display); font-weight: 700; font-size: 20px; color: var(--c); }
+    .pay-amt { font-size: 26px; font-weight: 700; }
+    .qr { width: 200px; height: 200px; background: #fff; border-radius: 14px; padding: 10px; box-shadow: var(--shadow); }
+    .qr :global(svg) { width: 100%; height: 100%; display: block; }
+    .pay-handle { font-size: 16px; font-weight: 700; letter-spacing: .01em; }
+    .pay-btn {
+      display: inline-flex; align-items: center; gap: 7px; padding: 11px 22px; border-radius: 999px;
+      background: var(--c); color: #fff; font-weight: 700; font-size: 14px; transition: transform .12s, box-shadow .12s;
+    }
+    .pay-btn:hover { transform: translateY(-1px); box-shadow: 0 10px 24px -10px var(--c); }
+    .pay-tip { font-size: 11.5px; margin: 0; }
+    .pay-todo { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 0; color: var(--muted); font-size: 13.5px; }
+    .dues-info ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 7px; }
+    .dues-info li { font-size: 13.5px; color: var(--muted); line-height: 1.5; }
+    .dues-info b { color: var(--text); }
+  </style>
+</Base>

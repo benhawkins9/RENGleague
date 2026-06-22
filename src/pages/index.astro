@@ -1,0 +1,201 @@
+---
+import Base from "../layouts/Base.astro";
+import StatCard from "../components/StatCard.astro";
+import RankBars from "../components/RankBars.astro";
+import ManagerChip from "../components/ManagerChip.astro";
+import {
+  meta, seasons, completedSeasons, allTimeStandings, records,
+  managers, getManager, managerColor, managerName, fmt, pct, record,
+} from "../lib/data.js";
+
+// champions per completed season (newest first)
+const champs = [...completedSeasons].reverse().map((s) => ({
+  season: s,
+  champ: seasons[s].champion,
+  pointsKing: seasons[s].pointsKing,
+}));
+
+// hero facts
+const totalGames = allTimeStandings.reduce((a, m) => a + m.allTime.w + m.allTime.l + m.allTime.t, 0);
+const totalPoints = allTimeStandings.reduce((a, m) => a + m.allTime.pf, 0);
+
+// records
+const topWeek = records.topWeeks[0];
+const blowout = records.biggestBlowouts[0];
+
+// longest streaks across all seasons
+let bestStreak = { n: 0 }, worstStreak = { n: 0 };
+for (const s of completedSeasons)
+  for (const r of seasons[s].standings) {
+    if (r.bestWinStreak > bestStreak.n) bestStreak = { n: r.bestWinStreak, managerId: r.managerId, teamName: r.teamName, season: s };
+    if (r.worstLossStreak > worstStreak.n) worstStreak = { n: r.worstLossStreak, managerId: r.managerId, teamName: r.teamName, season: s };
+  }
+
+// leaderboards
+const winPctBars = allTimeStandings.slice(0, 6).map((m) => ({
+  name: m.name, value: m.allTime.winPct, valueLabel: pct(m.allTime.winPct),
+  color: managerColor(m.id), href: `/managers/${m.id}`,
+  sub: `${record(m.allTime.w, m.allTime.l, m.allTime.t)} · ${m.allTime.seasons} seasons`,
+}));
+const allPlayBars = [...allTimeStandings].sort((a, b) => b.allTime.allPlayPct - a.allTime.allPlayPct).slice(0, 6).map((m) => ({
+  name: m.name, value: m.allTime.allPlayPct, valueLabel: pct(m.allTime.allPlayPct),
+  color: managerColor(m.id), href: `/managers/${m.id}`, sub: "vs. the entire field, every week",
+}));
+
+const sections = [
+  { href: "/standings", icon: "📊", title: "Standings & Power", desc: "All-play, luck index, efficiency, weekly form — season by season." },
+  { href: "/records", icon: "📖", title: "Record Book", desc: "Highest weeks, biggest blowouts, nailbiters, best player seasons ever." },
+  { href: "/head-to-head", icon: "⚔️", title: "Head-to-Head", desc: "All-time grid of every rivalry. Who owns who." },
+  { href: "/draft", icon: "🎯", title: "Draft Room", desc: "Every board since 2023, plus the biggest steals & busts." },
+  { href: "/managers", icon: "👤", title: "Manager Profiles", desc: "Career stats, finishes, and personal record books." },
+  { href: "/hall", icon: "🏆", title: "Hall of Fame", desc: "Champions, dynasty trajectory, and the all-time leaderboard." },
+  { href: "/labs", icon: "🧪", title: "Labs", desc: "Schedule-swap what-ifs, choke index, boom/bust, coin-flip luck." },
+];
+---
+
+<Base active="home" description={`The data home of the ${meta.name} dynasty fantasy league.`}>
+  <!-- HERO -->
+  <section class="hero">
+    <div class="wrap hero-inner">
+      <div class="hero-pills">
+        <span class="chip accent">🏈 Superflex Dynasty · 0.5 PPR</span>
+        <span class="chip">12 managers</span>
+        <span class="chip gold">{completedSeasons.length} seasons in the books</span>
+      </div>
+      <h1 class="hero-title">Regular Everday<br /><span class="grad">Normal Guys</span></h1>
+      <p class="hero-sub">
+        Four seasons of receipts. Every score, streak, steal and heartbreak since 2023 —
+        turned into the stats your group chat actually argues about.
+      </p>
+      <div class="hero-stats">
+        <div><span class="num">{completedSeasons.length}</span><label>Seasons</label></div>
+        <div><span class="num">{fmt(totalGames / 2)}</span><label>Games played</label></div>
+        <div><span class="num">{fmt(Math.round(totalPoints / 1000))}k</span><label>Total points</label></div>
+        <div><span class="num">{topWeek.points.toFixed(0)}</span><label>Highest week ever</label></div>
+      </div>
+      <div class="row" style="margin-top:26px;gap:10px">
+        <a href="/standings" class="btn">Explore the stats →</a>
+        <a href="/hall" class="btn ghost">🏆 Hall of Fame</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- CHAMPIONS -->
+  <section class="section-sm">
+    <div class="wrap">
+      <div class="eyebrow">Banner row</div>
+      <h2 class="section-title" style="font-size:clamp(22px,3vw,30px);margin-bottom:18px">Reigning & Past Champions</h2>
+      <div class="grid cols-3">
+        {champs.map(({ season, champ, pointsKing }, i) => (
+          <div class={`champ-card${i === 0 ? " is-current" : ""}`}>
+            <div class="cc-top">
+              <span class="cc-season num">{season}</span>
+              {i === 0 && <span class="chip gold" style="font-size:11px">Most recent</span>}
+            </div>
+            <div class="cc-trophy">🏆</div>
+            <ManagerChip id={champ.managerId} name={champ.teamName} size={38} sub={`#${champ.seed} seed · ${fmt(champ.total)} finals pts`} />
+            <div class="cc-foot dim">
+              VP #1 seed: <strong style="color:var(--text)">{managerName(seasons[season].standings[0].managerId)}</strong> · {seasons[season].standings[0].vp} VP
+            </div>
+          </div>
+        ))}
+      </div>
+      <p class="dim" style="font-size:12.5px;margin-top:12px">{meta.note}</p>
+    </div>
+  </section>
+
+  <!-- BY THE NUMBERS -->
+  <section class="section-sm">
+    <div class="wrap">
+      <div class="eyebrow">By the numbers</div>
+      <h2 class="section-title" style="font-size:clamp(22px,3vw,30px);margin:6px 0 18px">League Lore</h2>
+      <div class="grid cols-4">
+        <StatCard label="Highest score ever" value={topWeek.points.toFixed(1)} accent="accent"
+          icon="🔥" sub={`${topWeek.teamName} · ${topWeek.season} Wk ${topWeek.week}`} />
+        <StatCard label="Biggest blowout" value={`+${blowout.margin.toFixed(0)}`} accent="hot"
+          icon="💥" sub={`${blowout.teamName} · ${blowout.season} Wk ${blowout.week}`} />
+        <StatCard label="Longest win streak" value={bestStreak.n} unit="W" accent="gold"
+          icon="📈" sub={`${bestStreak.teamName} · ${bestStreak.season}`} />
+        <StatCard label="Longest skid" value={worstStreak.n} unit="L" accent="purple"
+          icon="🧊" sub={`${worstStreak.teamName} · ${worstStreak.season}`} />
+      </div>
+    </div>
+  </section>
+
+  <!-- LEADERBOARDS -->
+  <section class="section-sm">
+    <div class="wrap grid cols-2">
+      <div class="panel panel-pad">
+        <div class="row between" style="margin-bottom:16px">
+          <h3 style="font-size:18px">All-Time Win %</h3>
+          <a href="/hall" class="chip">Full board →</a>
+        </div>
+        <RankBars items={winPctBars} />
+      </div>
+      <div class="panel panel-pad">
+        <div class="row between" style="margin-bottom:6px">
+          <h3 style="font-size:18px">True Power (All-Play %)</h3>
+          <a href="/standings" class="chip">Why this matters →</a>
+        </div>
+        <p class="dim" style="font-size:12.5px;margin:0 0 14px">Win rate if everyone played everyone, every week — luck stripped out.</p>
+        <RankBars items={allPlayBars} />
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION NAV -->
+  <section class="section">
+    <div class="wrap">
+      <div class="eyebrow">Dig in</div>
+      <h2 class="section-title" style="font-size:clamp(22px,3vw,30px);margin:6px 0 18px">Explore the Vault</h2>
+      <div class="grid cols-3 navcards">
+        {sections.map((s) => (
+          <a href={s.href} class="navcard">
+            <span class="nc-icon">{s.icon}</span>
+            <span class="nc-title">{s.title}</span>
+            <span class="nc-desc">{s.desc}</span>
+            <span class="nc-go">Open →</span>
+          </a>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <style>
+    .hero { padding: 64px 0 38px; position: relative; overflow: hidden; }
+    .hero-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px; }
+    .hero-title { font-size: clamp(44px, 9vw, 92px); line-height: 0.92; letter-spacing: -0.03em; }
+    .grad {
+      background: linear-gradient(100deg, var(--accent), var(--accent-2) 60%, var(--purple));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .hero-sub { font-size: clamp(15px, 2vw, 18px); color: var(--muted); max-width: 56ch; margin: 22px 0 0; }
+    .hero-stats { display: flex; gap: 38px; flex-wrap: wrap; margin-top: 30px; }
+    .hero-stats > div { display: flex; flex-direction: column; }
+    .hero-stats .num { font-size: clamp(28px, 4vw, 40px); font-weight: 700; line-height: 1; }
+    .hero-stats label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-top: 6px; }
+
+    .champ-card {
+      background: linear-gradient(180deg, var(--panel), var(--bg-2));
+      border: 1px solid var(--line); border-radius: var(--radius); padding: 18px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .champ-card.is-current { border-color: rgba(255,207,74,.35); box-shadow: 0 0 0 1px rgba(255,207,74,.15), var(--shadow); }
+    .cc-top { display: flex; align-items: center; justify-content: space-between; }
+    .cc-season { font-size: 22px; font-weight: 700; color: var(--muted); }
+    .cc-trophy { font-size: 30px; filter: drop-shadow(0 4px 8px rgba(255,207,74,.3)); }
+    .cc-foot { font-size: 12px; border-top: 1px solid var(--line); padding-top: 11px; }
+
+    .navcards .navcard {
+      display: flex; flex-direction: column; gap: 7px; padding: 22px;
+      background: linear-gradient(180deg, var(--panel), var(--bg-2));
+      border: 1px solid var(--line); border-radius: var(--radius);
+      transition: transform .14s, border-color .14s;
+    }
+    .navcard:hover { transform: translateY(-3px); border-color: var(--line-2); }
+    .nc-icon { font-size: 26px; }
+    .nc-title { font-family: var(--display); font-weight: 700; font-size: 17px; }
+    .nc-desc { font-size: 13px; color: var(--muted); line-height: 1.45; }
+    .nc-go { font-size: 13px; font-weight: 600; color: var(--accent); margin-top: 4px; }
+  </style>
+</Base>

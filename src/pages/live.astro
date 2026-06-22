@@ -1,0 +1,158 @@
+---
+import Base from "../layouts/Base.astro";
+import PageHeader from "../components/PageHeader.astro";
+import ManagerChip from "../components/ManagerChip.astro";
+import { meta, seasons, managers, managerColor, fmt, signed, record } from "../lib/data.js";
+
+const liveSeason = meta.upcomingSeason || meta.completedSeasons[meta.completedSeasons.length - 1];
+const s = seasons[liveSeason] || { standings: [] };
+const standings = s.standings || [];
+const played = standings.length > 0 && (standings[0].weekly?.length || 0) > 0;
+const weeks = played ? standings[0].weekly.map((w) => w.week) : [];
+const lastWeek = weeks[weeks.length - 1];
+
+const lastWeekRows = played
+  ? standings.map((r) => ({ managerId: r.managerId, teamName: r.teamName, ...(r.weekly.find((x) => x.week === lastWeek) || {}) })).sort((a, b) => b.points - a.points)
+  : [];
+
+const vpColor = (vp) => (vp === 4 ? "var(--gold)" : vp === 3 ? "var(--accent)" : vp === 2 ? "var(--accent-2)" : vp === 1 ? "var(--muted)" : "var(--panel-3)");
+
+// preseason: list the entrants for the live season
+const entrants = managers
+  .filter((m) => m.teamNamesBySeason[liveSeason])
+  .map((m) => ({ id: m.id, name: m.teamNamesBySeason[liveSeason] }))
+  .sort((a, b) => a.name.localeCompare(b.name));
+
+const rules = [
+  { icon: "🤝", t: "Win your matchup", d: "+2 VP for beating your weekly head-to-head opponent." },
+  { icon: "📊", t: "Score with the pack", d: "Scoring bonus each week: top-4 = +2, middle-4 = +1, bottom-4 = 0." },
+  { icon: "💯", t: "Chase the perfect week", d: "Win AND finish top-4 in scoring = the max 4 VP." },
+  { icon: "🏆", t: "VP sets the seeds", d: "Top 6 by VP make the playoffs; top 2 get a Week-15 bye." },
+];
+---
+
+<Base active="live" title="Live Scoreboard" description={`Live ${liveSeason} Victory Points standings, updated weekly.`}>
+  {played ? (
+    <>
+      <PageHeader eyebrow={`${liveSeason} Season · live`} title="VP Scoreboard"
+        sub={`Through Week ${lastWeek}. Recomputed from Sleeper every Tuesday during the season.`}>
+        <span class="chip accent" style="margin-top:14px">● Live · updated weekly</span>
+      </PageHeader>
+
+      <section class="section-sm">
+        <div class="wrap grid cols-2">
+          <!-- live standings -->
+          <div class="panel" style="overflow:hidden">
+            <div class="panel-pad" style="padding-bottom:6px"><h3 style="font-size:16px">📊 Live VP Standings</h3></div>
+            <div style="overflow-x:auto">
+              <table class="tbl">
+                <thead><tr><th>#</th><th>Team</th><th class="td-num">VP</th><th class="td-num">Rec</th><th class="td-num">PF</th></tr></thead>
+                <tbody>
+                  {standings.map((r) => (
+                    <tr class={r.seed === 6 ? "cut" : ""}>
+                      <td class="num" style={r.seed <= 2 ? "color:var(--gold);font-weight:700" : r.seed <= 6 ? "font-weight:600" : "color:var(--faint)"}>{r.seed}</td>
+                      <td><ManagerChip id={r.managerId} name={r.teamName} size={26} /></td>
+                      <td class="td-num num" style="font-weight:700;color:var(--accent)">{r.vp}</td>
+                      <td class="td-num num">{record(r.w, r.l, r.t)}</td>
+                      <td class="td-num">{fmt(r.pf)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- last week -->
+          <div class="panel panel-pad">
+            <h3 style="font-size:16px;margin-bottom:4px">🗓️ Week {lastWeek} VP Earned</h3>
+            <p class="dim" style="font-size:12px;margin:0 0 12px">Points · scoring tier + H2H = VP that week</p>
+            {lastWeekRows.map((r, i) => (
+              <div class="lw-row">
+                <span class="num lw-rank">{i + 1}</span>
+                <div style="flex:1;min-width:0"><ManagerChip id={r.managerId} name={r.teamName} size={24} /></div>
+                <span class="num lw-pts">{fmt(r.points)}</span>
+                <span class="lw-vp num" style={`background:${vpColor(r.vp)}22;color:${vpColor(r.vp)}`}>{r.vp} VP</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <!-- weekly VP matrix -->
+      <section class="section-sm">
+        <div class="wrap">
+          <div class="panel panel-pad">
+            <h3 style="font-size:16px;margin-bottom:2px">🔥 Weekly VP Heatmap</h3>
+            <p class="dim" style="font-size:12px;margin:0 0 14px">VP earned each week — <span style="color:var(--gold)">gold = perfect 4</span>. Hover for the score.</p>
+            <div style="overflow-x:auto">
+              <table class="heat">
+                <thead><tr><th>Team</th>{weeks.map((w) => <th class="num">{w}</th>)}<th class="num">Σ</th></tr></thead>
+                <tbody>
+                  {standings.map((r) => (
+                    <tr>
+                      <td class="heat-team"><ManagerChip id={r.managerId} name={r.teamName} size={22} /></td>
+                      {weeks.map((wk) => {
+                        const w = r.weekly.find((x) => x.week === wk);
+                        return <td class="heat-cell"><span class="num" style={`background:${vpColor(w?.vp ?? 0)}22;color:${vpColor(w?.vp ?? 0)}`} title={`Wk ${wk}: ${w ? fmt(w.points) + " pts · " + w.result : "—"}`}>{w?.vp ?? "·"}</span></td>;
+                      })}
+                      <td class="num" style="font-weight:700;color:var(--accent)">{r.vp}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+    </>
+  ) : (
+    <>
+      <PageHeader eyebrow={`${liveSeason} Season`} title="The Scoreboard Awaits"
+        sub={`${liveSeason} hasn't kicked off yet. Once Week 1 is in the books, live Victory Points standings and a weekly heatmap show up here — refreshed automatically every Tuesday.`}>
+        <span class="chip" style="margin-top:14px">🏈 Preseason · NFL week {meta.nflState.week || 0}</span>
+      </PageHeader>
+
+      <section class="section-sm">
+        <div class="wrap">
+          <div class="eyebrow">How VP works</div>
+          <h2 class="section-title" style="font-size:clamp(20px,3vw,26px);margin:6px 0 16px">Earn up to 4 a week</h2>
+          <div class="grid cols-4">
+            {rules.map((r) => (
+              <div class="rule"><span class="r-ic">{r.icon}</span><span class="r-t">{r.t}</span><span class="r-d">{r.d}</span></div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section class="section-sm">
+        <div class="wrap">
+          <div class="row between" style="margin-bottom:14px"><h3 style="font-size:17px">🏈 {liveSeason} Field · {entrants.length} teams</h3><a href="/draft" class="chip accent">See the rookie draft →</a></div>
+          <div class="grid cols-3">
+            {entrants.map((e) => (
+              <a href={`/managers/${e.id}`} class="entrant" style={`--c:${managerColor(e.id)}`}><ManagerChip id={e.id} name={e.name} size={30} /></a>
+            ))}
+          </div>
+        </div>
+      </section>
+    </>
+  )}
+
+  <style>
+    tr.cut td { border-bottom: 2px solid var(--line-2); }
+    .lw-row { display: flex; align-items: center; gap: 9px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+    .lw-row:last-child { border: none; }
+    .lw-rank { color: var(--faint); font-weight: 700; width: 16px; font-size: 12px; }
+    .lw-pts { font-weight: 700; font-size: 14px; }
+    .lw-vp { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 999px; }
+    .heat { border-collapse: collapse; font-size: 13px; }
+    .heat th { font-family: var(--display); color: var(--muted); font-size: 11px; padding: 4px 6px; text-align: center; }
+    .heat th:first-child { text-align: left; }
+    .heat-team { padding: 4px 10px 4px 0; white-space: nowrap; }
+    .heat-cell { padding: 3px; text-align: center; }
+    .heat-cell span { display: inline-grid; place-items: center; width: 30px; height: 26px; border-radius: 6px; font-weight: 700; font-size: 12px; }
+    .rule { background: linear-gradient(180deg, var(--panel), var(--bg-2)); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; gap: 7px; }
+    .r-ic { font-size: 24px; } .r-t { font-family: var(--display); font-weight: 700; font-size: 15px; } .r-d { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+    .entrant { display: block; padding: 12px 14px; background: linear-gradient(180deg, var(--panel), var(--bg-2)); border: 1px solid var(--line); border-left: 3px solid var(--c); border-radius: var(--radius-sm); transition: transform .12s, border-color .12s; }
+    .entrant:hover { transform: translateY(-2px); border-color: var(--c); }
+  </style>
+</Base>

@@ -1,0 +1,222 @@
+---
+import Base from "../layouts/Base.astro";
+import PageHeader from "../components/PageHeader.astro";
+import ManagerChip from "../components/ManagerChip.astro";
+import {
+  meta, seasons, completedSeasons, draft,
+  managerColor, managerName, fmt,
+} from "../lib/data.js";
+
+// Steals & busts straight from the data layer (already sorted upstream).
+const steals = draft.steals;
+const busts = draft.busts;
+
+// Boards newest-first, including the just-completed 2026 rookie draft; picks grouped by round.
+const draftSeasons = [...meta.seasonOrder].reverse().filter((s) => (seasons[s].draftBoard || []).length > 0);
+const boards = draftSeasons.map((season) => {
+  const picks = seasons[season].draftBoard || [];
+  const roundNums = [...new Set(picks.map((p) => p.round))].sort((a, b) => a - b);
+  const rounds = roundNums.map((round) => ({
+    round,
+    picks: picks
+      .filter((p) => p.round === round)
+      .sort((a, b) => a.pickNo - b.pickNo),
+  }));
+  const best = draft.bestByYear?.[season]?.[0] || null;
+  return { season, rounds, totalPicks: picks.length, best, upcoming: season === meta.upcomingSeason };
+});
+---
+
+<Base active="draft" title="Draft Room" description={`Every draft pick, steal and bust since 2023 in the ${meta.name} league.`}>
+  <PageHeader
+    eyebrow="The war room"
+    title="Draft Room"
+    sub="Every pick since 2023 — plus the steals that won titles and the busts that haunt the group chat."
+  />
+
+  <!-- BIGGEST STEALS -->
+  <section class="section-sm" style="padding-top:6px">
+    <div class="wrap">
+      <div class="eyebrow">Late-round larceny</div>
+      <h2 class="section-title" style="font-size:clamp(22px,3vw,30px);margin:6px 0 16px">💎 Biggest Steals</h2>
+      <div class="panel panel-pad">
+        <p class="dim" style="font-size:12.5px;margin:0 0 18px">
+          Picks taken late that went on to print fantasy points in-league. The best dollar-store finds in dynasty history.
+        </p>
+        <div class="grid cols-3">
+          {steals.map((p) => (
+            <div class="pick-tile" style={`--mc:${managerColor(p.managerId)}`}>
+              <div class="pt-meta">
+                <span class="num">{p.season} · R{p.round} #{p.pickNo}</span>
+                <span class="chip accent" style="font-size:10.5px;padding:2px 8px">Steal</span>
+              </div>
+              <div class="pt-player">
+                <span class="pt-name">{p.name}</span>
+                <span class={`tag-pos pos-${p.pos}`}>{p.pos}</span>
+                {p.team && <span class="pt-team faint num">{p.team}</span>}
+              </div>
+              <ManagerChip id={p.managerId} size={26} />
+              <div class="pt-stat">
+                <span class="num pt-num">{fmt(p.careerPoints, 1)}</span>
+                <span class="pt-unit">league pts</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BIGGEST BUSTS -->
+  <section class="section-sm">
+    <div class="wrap">
+      <div class="eyebrow">Premium picks, discount returns</div>
+      <h2 class="section-title" style="font-size:clamp(22px,3vw,30px);margin:6px 0 16px">🪦 Biggest Busts</h2>
+      <div class="panel panel-pad">
+        <p class="dim" style="font-size:12.5px;margin:0 0 18px">
+          Spent early, delivered little. The premium capital that turned into screenshots in the group chat.
+        </p>
+        <div class="grid cols-3">
+          {busts.map((p) => (
+            <div class="pick-tile bust" style={`--mc:${managerColor(p.managerId)}`}>
+              <div class="pt-meta">
+                <span class="pt-pick num">Pick #{p.pickNo}</span>
+                <span class="chip hot" style="font-size:10.5px;padding:2px 8px">{p.season} · R{p.round}</span>
+              </div>
+              <div class="pt-player">
+                <span class="pt-name">{p.name}</span>
+                <span class={`tag-pos pos-${p.pos}`}>{p.pos}</span>
+                {p.team && <span class="pt-team faint num">{p.team}</span>}
+              </div>
+              <ManagerChip id={p.managerId} size={26} />
+              <div class="pt-stat">
+                <span class="num pt-num bust-num">{fmt(p.careerPoints, 1)}</span>
+                <span class="pt-unit">league pts</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- THE BOARDS -->
+  <section class="section">
+    <div class="wrap">
+      <div class="eyebrow">Pick by pick</div>
+      <h2 class="section-title" style="font-size:clamp(22px,3vw,30px);margin:6px 0 18px">📋 The Boards</h2>
+
+      <div class="boards">
+        {boards.map(({ season, rounds, totalPicks, best, upcoming }) => (
+          <div class={`panel panel-pad board${upcoming ? " board-new" : ""}`}>
+            <div class="board-head">
+              <div class="row" style="gap:10px">
+                <h3 class="board-season num">{season}</h3>
+                {upcoming
+                  ? <span class="chip gold">🔥 Rookie draft · just drafted</span>
+                  : <span class="chip">{totalPicks} picks · {rounds.length} rounds</span>}
+              </div>
+              {best && (
+                <div class="board-best dim">
+                  <span class="bb-label">Best pick</span>
+                  <span class={`tag-pos pos-${best.pos}`}>{best.pos}</span>
+                  <strong style="color:var(--text)">{best.name}</strong>
+                  <span class="faint">·</span>
+                  <span style={`color:${managerColor(best.managerId)}`}>{managerName(best.managerId)}</span>
+                  <span class="faint">· {fmt(best.careerPoints, 1)} pts</span>
+                </div>
+              )}
+            </div>
+
+            <div class="rounds">
+              {rounds.map(({ round, picks }) => (
+                <div class="round">
+                  <div class="round-label num">Round {round}</div>
+                  <div class="round-picks">
+                    {picks.map((p) => (
+                      <div
+                        class="dpick"
+                        style={`--mc:${managerColor(p.managerId)}`}
+                        title={managerName(p.managerId)}
+                      >
+                        <span class="dp-no num">#{p.pickNo}</span>
+                        <span class="dp-name">{p.name}</span>
+                        <span class={`tag-pos pos-${p.pos}`}>{p.pos}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <style>
+    /* ---- shared pick tile (steals + busts) ---- */
+    .pick-tile {
+      display: flex; flex-direction: column; gap: 12px;
+      background: linear-gradient(180deg, var(--panel-2), var(--bg-2));
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--mc);
+      border-radius: var(--radius-sm);
+      padding: 14px 15px;
+    }
+    .pt-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .pt-meta > .num { font-size: 12px; color: var(--muted); letter-spacing: .02em; }
+    .pt-pick { font-size: 13px; font-weight: 700; color: var(--text); }
+    .pt-player { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .pt-name { font-family: var(--display); font-weight: 700; font-size: 15px; }
+    .pt-team { font-size: 11px; letter-spacing: .04em; }
+    .pt-stat { display: flex; align-items: baseline; gap: 7px; border-top: 1px solid var(--line); padding-top: 11px; margin-top: 2px; }
+    .pt-num { font-size: 26px; font-weight: 700; line-height: 1; color: var(--accent); }
+    .bust-num { color: var(--hot); }
+    .pt-unit { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
+
+    /* ---- the boards ---- */
+    .boards { display: flex; flex-direction: column; gap: 18px; }
+    .board-new { border-color: rgba(255,207,74,.32); box-shadow: 0 0 0 1px rgba(255,207,74,.12), var(--shadow); }
+    .board-head {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 14px; flex-wrap: wrap;
+      border-bottom: 1px solid var(--line); padding-bottom: 14px; margin-bottom: 16px;
+    }
+    .board-season { font-size: 26px; font-weight: 700; }
+    .board-best { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 12.5px; }
+    .bb-label {
+      font-family: var(--display); text-transform: uppercase; letter-spacing: .1em;
+      font-size: 10.5px; font-weight: 600; color: var(--accent);
+    }
+
+    .rounds { display: flex; flex-direction: column; gap: 14px; }
+    .round { display: grid; grid-template-columns: 74px 1fr; gap: 12px; align-items: start; }
+    .round-label {
+      font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+      color: var(--muted); padding-top: 7px;
+    }
+    .round-picks { display: flex; flex-wrap: wrap; gap: 7px; }
+
+    .dpick {
+      display: inline-flex; align-items: center; gap: 7px;
+      max-width: 100%;
+      padding: 5px 9px 5px 8px; border-radius: 7px;
+      background: var(--panel); border: 1px solid var(--line);
+      border-left: 2.5px solid var(--mc);
+      transition: border-color .14s, background .14s;
+    }
+    .dpick:hover { background: var(--panel-3); border-color: var(--line-2); border-left-color: var(--mc); }
+    .dp-no { font-size: 11px; font-weight: 700; color: var(--faint); flex-shrink: 0; }
+    .dp-name {
+      font-size: 12.5px; font-weight: 600; color: var(--text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px;
+    }
+
+    @media (max-width: 620px) {
+      .round { grid-template-columns: 1fr; gap: 6px; }
+      .round-label { padding-top: 0; }
+      .dp-name { max-width: 44vw; }
+    }
+  </style>
+</Base>

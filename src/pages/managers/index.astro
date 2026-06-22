@@ -1,0 +1,61 @@
+---
+import Base from "../../layouts/Base.astro";
+import PageHeader from "../../components/PageHeader.astro";
+import { allTimeStandings, avatarUrl, getManager, managerColor, pct, record, ordinal } from "../../lib/data.js";
+---
+
+<Base active="managers" title="Managers" description="The 12 dynasty managers — career stats and profiles.">
+  <PageHeader eyebrow="The dynasty" title="The Managers" sub="Twelve managers, four seasons, one group chat. Tap a card for the full career breakdown." />
+  <section class="section-sm">
+    <div class="wrap">
+      <div class="grid cols-3">
+        {allTimeStandings.map((m, i) => {
+          const av = avatarUrl(getManager(m.id)?.avatar);
+          const color = managerColor(m.id);
+          const a = m.allTime;
+          return (
+            <a href={`/managers/${m.id}`} class="mgr-card" style={`--c:${color}`}>
+              <div class="mc-head">
+                <span class="mc-av">{av ? <img src={av} alt="" /> : <span class="fb">{m.name.charAt(0)}</span>}</span>
+                <div class="mc-id">
+                  <span class="mc-rankpill num">#{i + 1}</span>
+                  <h3>{m.name}</h3>
+                  <span class="dim" style="font-size:12px">@{getManager(m.id)?.displayName}</span>
+                </div>
+              </div>
+              <div class="mc-stats">
+                <div><span class="num">{record(a.w, a.l, a.t)}</span><label>Record</label></div>
+                <div><span class="num">{pct(a.winPct)}</span><label>Win %</label></div>
+                <div><span class="num">{a.titles}</span><label>Titles</label></div>
+                <div><span class="num">{a.bestFinish ? ordinal(a.bestFinish) : "—"}</span><label>Best finish</label></div>
+              </div>
+              <div class="mc-foot">
+                {a.titles > 0 && <span class="chip gold">🏆 {a.titles}× champ</span>}
+                {a.pointsTitles > 0 && <span class="chip accent">📈 {a.pointsTitles}× points king</span>}
+                <span class="chip">{a.seasons} seasons</span>
+              </div>
+            </a>
+          );
+        })}
+      </div>
+    </div>
+  </section>
+  <style>
+    .mgr-card { display: flex; flex-direction: column; gap: 16px; padding: 20px; background: linear-gradient(180deg, var(--panel), var(--bg-2));
+      border: 1px solid var(--line); border-radius: var(--radius); transition: transform .14s, border-color .14s; position: relative; overflow: hidden; }
+    .mgr-card::before { content:""; position:absolute; inset:0 0 auto 0; height:3px; background: var(--c); opacity:.85; }
+    .mgr-card:hover { transform: translateY(-3px); border-color: var(--c); }
+    .mc-head { display: flex; gap: 13px; align-items: center; }
+    .mc-av { width: 52px; height: 52px; border-radius: 12px; overflow: hidden; flex-shrink: 0; display: grid; place-items: center;
+      background: var(--panel-3); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c) 40%, transparent); }
+    .mc-av img { width: 100%; height: 100%; object-fit: cover; }
+    .mc-av .fb { font-family: var(--display); font-weight: 700; font-size: 22px; color: var(--c); }
+    .mc-id h3 { font-size: 17px; margin: 2px 0; }
+    .mc-rankpill { font-size: 11px; color: var(--faint); font-weight: 700; }
+    .mc-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; border-top: 1px solid var(--line); padding-top: 14px; }
+    .mc-stats > div { display: flex; flex-direction: column; }
+    .mc-stats .num { font-size: 18px; font-weight: 700; line-height: 1; }
+    .mc-stats label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 5px; }
+    .mc-foot { display: flex; gap: 6px; flex-wrap: wrap; }
+  </style>
+</Base>

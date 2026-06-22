@@ -1,0 +1,256 @@
+---
+import Base from "../layouts/Base.astro";
+import PageHeader from "../components/PageHeader.astro";
+import ManagerChip from "../components/ManagerChip.astro";
+import {
+  seasons, completedSeasons, allTimeStandings, managers, vpRecords,
+  getManager, managerName, managerColor, fmt, pct, signed, record, ordinal,
+} from "../lib/data.js";
+
+const champsNewest = [...completedSeasons].reverse();
+const champBySeason = Object.fromEntries(completedSeasons.map((s) => [s, seasons[s].champion?.managerId]));
+
+// ---- bump chart geometry (y = VP seed) ----
+const S = completedSeasons;
+const W = 880, H = 470, padL = 44, padR = 128, padT = 28, padB = 40;
+const plotW = W - padL - padR, plotH = H - padT - padB;
+const xAt = (i) => padL + (S.length === 1 ? plotW / 2 : (i * plotW) / (S.length - 1));
+const yAt = (seed) => padT + ((seed - 1) * plotH) / 11;
+const lines = managers.map((m) => {
+  const pts = S.map((s, i) => (m.allTime.finishes[s] ? { i, x: xAt(i), y: yAt(m.allTime.finishes[s]), seed: m.allTime.finishes[s], season: s, champ: champBySeason[s] === m.id } : null)).filter(Boolean);
+  return pts.length ? { id: m.id, name: m.name, color: managerColor(m.id), pts, last: pts[pts.length - 1] } : null;
+}).filter(Boolean);
+
+const mostTitles = [...allTimeStandings].sort((a, b) => b.allTime.titles - a.allTime.titles)[0];
+const mostPoints = [...allTimeStandings].sort((a, b) => b.allTime.pf - a.allTime.pf)[0];
+const mostVP = [...allTimeStandings].sort((a, b) => b.allTime.vp - a.allTime.vp)[0];
+const ringless = [...allTimeStandings].filter((m) => m.allTime.titles === 0).sort((a, b) => b.allTime.vp - a.allTime.vp)[0];
+---
+
+<Base active="hall" title="Hall of Fame" description="Champions, playoff brackets, dynasty trajectory and the all-time leaderboard.">
+  <PageHeader eyebrow="The trophy case" title="Hall of Fame" sub="Every champion, the full playoff brackets, and where everyone stands all-time. Note: the VP #1 seed has been upset every year but one." />
+
+  <!-- champions timeline -->
+  <section class="section-sm">
+    <div class="wrap">
+      <div class="grid cols-3">
+        {champsNewest.map((season, i) => {
+          const c = seasons[season].champion, ru = seasons[season].runnerUp;
+          return (
+            <div class={`champ${i === 0 ? " latest" : ""}`}>
+              <div class="row between"><span class="num cyr">{season}</span>{i === 0 && <span class="chip gold">Reigning</span>}</div>
+              <div class="ctr">🏆</div>
+              <ManagerChip id={c.managerId} name={c.teamName} size={40} sub={`#${c.seed} seed · ${fmt(c.total)} finals pts`} />
+              {ru && <div class="cfoot dim">def. <b style="color:var(--text)">{ru.teamName}</b> in the final · {fmt(ru.total)}</div>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  </section>
+
+  <!-- playoff brackets -->
+  <section class="section-sm">
+    <div class="wrap">
+      <div class="eyebrow">How the title was won</div>
+      <h2 class="section-title" style="font-size:clamp(22px,3vw,30px);margin:6px 0 4px">Playoff Brackets</h2>
+      <p class="section-sub" style="margin-bottom:18px">Seeds 1–2 bye into the final. Seeds 3–6 play a Week-15 score shootout — top 2 advance. The four finalists then play a 2-week final; highest cumulative score is champion.</p>
+      <div class="brackets">
+        {champsNewest.map((season) => {
+          const p = seasons[season].playoffs;
+          return (
+            <div class="bracket panel panel-pad">
+              <div class="row between wrap-gap" style="margin-bottom:14px">
+                <h3 class="num" style="font-size:20px">{season}</h3>
+                <span class="chip gold">🏆 {seasons[season].champion.teamName}</span>
+              </div>
+              <div class="bcols">
+                <div class="bcol">
+                  <h4>Week {p.playInWeek} Play-In <small>top 2 advance</small></h4>
+                  {p.playin.map((t) => (
+                    <div class={`pirow ${t.advanced ? "adv" : "out"}`}>
+                      <span class="pi-seed num">#{t.seed}</span>
+                      <span class="pi-name">{t.teamName}</span>
+                      <span class="num pi-pts">{fmt(t.points)}</span>
+                      <span class="pi-tag">{t.advanced ? "▲" : "✗"}</span>
+                    </div>
+                  ))}
+                  <div class="byes-note dim">Byes: {p.byes.map((b) => b.teamName).join(" · ")}</div>
+                </div>
+                <div class="bcol">
+                  <h4>Finals <small>Wk {p.finalsWeeks.join(" + ")} cumulative</small></h4>
+                  {p.finals.map((f) => (
+                    <div class={`frow place-${f.place}`}>
+                      <span class="f-place num">{f.place === 1 ? "🏆" : f.place}</span>
+                      <span class="f-name">{f.teamName}{f.seed <= 2 ? <span class="byetag"> bye</span> : null}</span>
+                      <span class="f-line num">{fmt(f.wk[p.finalsWeeks[0]])}+{fmt(f.wk[p.finalsWeeks[1]])}</span>
+                      <span class="f-total num">{fmt(f.total)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  </section>
+
+  <!-- dynasty trajectory bump chart -->
+  <section class="section-sm">
+    <div class="wrap">
+      <div class="panel panel-pad">
+        <div class="row between wrap-gap" style="margin-bottom:6px">
+          <h3 style="font-size:18px">📈 Dynasty Trajectory</h3>
+          <span class="dim" style="font-size:12.5px">VP seed each season · 1st at top · <span style="color:var(--gold)">●</span> = won the title. Hover a line.</span>
+        </div>
+        <div style="overflow-x:auto">
+          <svg viewBox={`0 0 ${W} ${H}`} class="bump" style="min-width:680px;width:100%;height:auto">
+            {[1, 4, 8, 12].map((seed) => (
+              <g>
+                <line x1={padL} y1={yAt(seed)} x2={W - padR} y2={yAt(seed)} stroke="rgba(255,255,255,.06)" />
+                <text x={padL - 10} y={yAt(seed) + 4} fill="var(--faint)" font-size="11" text-anchor="end" class="num">{ordinal(seed)}</text>
+              </g>
+            ))}
+            {S.map((s, i) => (<text x={xAt(i)} y={H - 12} fill="var(--muted)" font-size="13" text-anchor="middle" class="num" style="font-weight:600">{s}</text>))}
+            {lines.map((ln) => (
+              <g class="bline" style={`--c:${ln.color}`}>
+                <polyline points={ln.pts.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke={ln.color} stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.5" />
+                {ln.pts.map((p) => (
+                  <g>
+                    {p.champ && <circle cx={p.x} cy={p.y} r="9" fill="none" stroke="var(--gold)" stroke-width="2" />}
+                    <circle cx={p.x} cy={p.y} r={p.champ ? 6 : 4} fill={p.champ ? "var(--gold)" : ln.color} stroke="var(--bg)" stroke-width="2" />
+                  </g>
+                ))}
+                <text x={ln.last.x + 12} y={ln.last.y + 4} fill={ln.color} font-size="12" style="font-weight:600">{ln.name.length > 16 ? ln.name.slice(0, 15) + "…" : ln.name}</text>
+              </g>
+            ))}
+          </svg>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- superlatives -->
+  <section class="section-sm">
+    <div class="wrap">
+      <div class="eyebrow">Hardware & honors</div>
+      <h2 class="section-title" style="font-size:clamp(22px,3vw,30px);margin:6px 0 16px">All-Time Superlatives</h2>
+      <div class="grid cols-4">
+        <div class="sup"><span class="sl">Most titles 🏆</span><ManagerChip id={mostTitles.id} size={30} /><span class="sv num gold">{mostTitles.allTime.titles}</span><span class="sd">championships won (2-week finals)</span></div>
+        <div class="sup"><span class="sl">Most VP all-time</span><ManagerChip id={mostVP.id} size={30} /><span class="sv num accent-t">{mostVP.allTime.vp}</span><span class="sd">total Victory Points, all seasons</span></div>
+        <div class="sup"><span class="sl">Most points all-time</span><ManagerChip id={mostPoints.id} size={30} /><span class="sv num">{fmt(mostPoints.allTime.pf)}</span><span class="sd">total points scored (regular season)</span></div>
+        <div class="sup"><span class="sl">Best without a ring</span><ManagerChip id={ringless.id} size={30} /><span class="sv num">{ringless.allTime.vp} <small style="font-size:13px">VP</small></span><span class="sd">most Victory Points, never won a title</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- VP vault -->
+  <section class="section-sm">
+    <div class="wrap">
+      <div class="eyebrow">Victory Points</div>
+      <h2 class="section-title" style="font-size:clamp(22px,3vw,30px);margin:6px 0 4px">The VP Vault</h2>
+      <p class="section-sub" style="margin-bottom:18px">A <b>perfect week</b> is the maximum 4 VP — win your matchup <i>and</i> finish top-4 in scoring. Here's who stacked the most.</p>
+      <div class="grid cols-3">
+        <div class="panel panel-pad">
+          <h3 style="font-size:15px;margin-bottom:3px">🔋 Best VP Seasons</h3>
+          <p class="dim" style="font-size:11.5px;margin:0 0 12px">Most VP in a single {seasons[completedSeasons[0]].regSeasonWeeks}-week season</p>
+          {vpRecords.topSeasonVP.slice(0, 5).map((r, i) => (
+            <div class="vrow"><span class="num idx">{i + 1}</span><div style="flex:1;min-width:0"><ManagerChip id={r.managerId} name={r.teamName} size={24} sub={`${r.season} · #${r.seed} seed`} /></div><span class="num vval">{r.vp}</span></div>
+          ))}
+        </div>
+        <div class="panel panel-pad">
+          <h3 style="font-size:15px;margin-bottom:3px">💯 Most Perfect Weeks</h3>
+          <p class="dim" style="font-size:11.5px;margin:0 0 12px">Most 4-VP weeks in a season (won + top-4)</p>
+          {vpRecords.mostPerfectWeeks.slice(0, 5).map((r, i) => (
+            <div class="vrow"><span class="num idx">{i + 1}</span><div style="flex:1;min-width:0"><ManagerChip id={r.managerId} name={r.teamName} size={24} sub={r.season} /></div><span class="num vval">{r.perfectWeeks}</span></div>
+          ))}
+        </div>
+        <div class="panel panel-pad">
+          <h3 style="font-size:15px;margin-bottom:3px">🎯 Most Scoring VP</h3>
+          <p class="dim" style="font-size:11.5px;margin:0 0 12px">VP from scoring tiers alone — pure firepower</p>
+          {vpRecords.mostScoringVP.slice(0, 5).map((r, i) => (
+            <div class="vrow"><span class="num idx">{i + 1}</span><div style="flex:1;min-width:0"><ManagerChip id={r.managerId} name={r.teamName} size={24} sub={r.season} /></div><span class="num vval">{r.vpScore}</span></div>
+          ))}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- all-time leaderboard -->
+  <section class="section-sm" style="padding-bottom:40px">
+    <div class="wrap">
+      <div class="row between" style="margin-bottom:14px"><h3 style="font-size:18px">🏅 All-Time Leaderboard</h3><span class="dim" style="font-size:12.5px">Ranked by titles, then win %</span></div>
+      <div class="panel" style="overflow:hidden">
+        <div style="overflow-x:auto">
+          <table class="tbl">
+            <thead><tr><th>#</th><th>Manager</th><th class="td-num">Szns</th><th class="td-num">Record</th><th class="td-num">Win%</th><th class="td-num">VP</th><th class="td-num">All-Play%</th><th class="td-num">PF</th><th class="td-center">Finals</th><th class="td-num">🏆</th></tr></thead>
+            <tbody>
+              {allTimeStandings.map((m, i) => (
+                <tr>
+                  <td class="num" style={`font-weight:700;color:${m.allTime.titles ? "var(--gold)" : "var(--faint)"}`}>{i + 1}</td>
+                  <td><ManagerChip id={m.id} size={30} /></td>
+                  <td class="td-num dim">{m.allTime.seasons}</td>
+                  <td class="td-num num" style="font-weight:600">{record(m.allTime.w, m.allTime.l, m.allTime.t)}</td>
+                  <td class="td-num num" style="font-weight:700">{pct(m.allTime.winPct)}</td>
+                  <td class="td-num"><span class="accent-t num">{m.allTime.vp}</span></td>
+                  <td class="td-num dim">{pct(m.allTime.allPlayPct)}</td>
+                  <td class="td-num">{fmt(m.allTime.pf)}</td>
+                  <td class="td-center dim num">{m.allTime.finalsApps || "—"}</td>
+                  <td class="td-num">{m.allTime.titles ? "🏆".repeat(m.allTime.titles) : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <style>
+    .champ { background: linear-gradient(180deg, var(--panel), var(--bg-2)); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+    .champ.latest { border-color: rgba(255,207,74,.35); box-shadow: 0 0 0 1px rgba(255,207,74,.13), var(--shadow); }
+    .cyr { font-size: 22px; font-weight: 700; color: var(--muted); }
+    .ctr { font-size: 30px; filter: drop-shadow(0 4px 8px rgba(255,207,74,.3)); }
+    .cfoot { font-size: 12px; border-top: 1px solid var(--line); padding-top: 11px; }
+
+    .brackets { display: flex; flex-direction: column; gap: 16px; }
+    .bcols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .bcol h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 10px; font-weight: 600; }
+    .bcol h4 small { color: var(--faint); text-transform: none; letter-spacing: 0; font-weight: 500; margin-left: 4px; }
+    .pirow, .frow { display: grid; align-items: center; gap: 9px; padding: 7px 9px; border-radius: 8px; margin-bottom: 5px; font-size: 13px; }
+    .pirow { grid-template-columns: 30px 1fr auto 16px; background: var(--bg-2); border: 1px solid var(--line); }
+    .pirow.adv { border-color: rgba(46,230,166,.35); background: var(--accent-soft); }
+    .pirow.out { opacity: .55; }
+    .pi-seed { color: var(--faint); font-weight: 700; font-size: 12px; }
+    .pi-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pi-pts { font-weight: 700; }
+    .pi-tag { text-align: center; color: var(--accent); font-weight: 700; }
+    .pirow.out .pi-tag { color: var(--hot); }
+    .byes-note { font-size: 11.5px; margin-top: 8px; }
+    .frow { grid-template-columns: 26px 1fr auto auto; background: var(--bg-2); border: 1px solid var(--line); }
+    .frow.place-1 { border-color: rgba(255,207,74,.4); background: var(--gold-soft); }
+    .f-place { font-weight: 700; text-align: center; }
+    .f-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .byetag { font-size: 9.5px; color: var(--gold); background: var(--gold-soft); padding: 1px 4px; border-radius: 4px; font-weight: 700; }
+    .f-line { font-size: 11.5px; color: var(--muted); }
+    .f-total { font-weight: 700; }
+    .frow.place-1 .f-total { color: var(--gold); }
+
+    .bump text { font-family: var(--display); }
+    .bline { transition: opacity .15s; cursor: default; }
+    .bline:hover polyline { opacity: 1 !important; stroke-width: 4; }
+    .bump:hover .bline:not(:hover) { opacity: .25; }
+    .sup { background: linear-gradient(180deg, var(--panel), var(--bg-2)); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 9px; }
+    .sl { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; }
+    .sv { font-size: 22px; font-weight: 700; margin-top: 2px; }
+    .sd { font-size: 11px; color: var(--faint); line-height: 1.35; margin-top: 2px; }
+    .vrow { display: flex; align-items: center; gap: 9px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+    .vrow:last-child { border: none; }
+    .vrow .idx { color: var(--faint); font-weight: 700; width: 14px; font-size: 12px; flex-shrink: 0; }
+    .vval { font-weight: 700; font-size: 16px; color: var(--accent); flex-shrink: 0; }
+    .gold { color: var(--gold); }
+    .accent-t { color: var(--accent); }
+    @media (max-width: 640px) { .bcols { grid-template-columns: 1fr; gap: 20px; } }
+  </style>
+</Base>
