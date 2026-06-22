@@ -4,7 +4,7 @@ import StatCard from "../../components/StatCard.astro";
 import ManagerChip from "../../components/ManagerChip.astro";
 import {
   managers, seasons, completedSeasons, headToHead, draft, acquisition, dynasty,
-  getManager, managerName, managerColor, avatarUrl, fmt, pct, signed, record, ordinal,
+  getManager, managerName, managerColor, avatarUrl, isCommissioner, fmt, pct, signed, record, ordinal,
 } from "../../lib/data.js";
 
 export function getStaticPaths() {
@@ -84,6 +84,7 @@ const resultFor = (season, seed) => {
         <h1 class="mgr-name">{m.name}</h1>
         <p class="dim" style="margin:4px 0 0">@{m.displayName} · {a.seasons} seasons played</p>
         <div class="row wrap-gap" style="margin-top:14px;gap:7px">
+          {isCommissioner(id) && <a href="/commish" class="chip purple">🏛️ Co-Commissioner</a>}
           {a.titles > 0 && <span class="chip gold">🏆 {a.titles}× Champion</span>}
           {a.runnerUps > 0 && <span class="chip blue">🥈 {a.runnerUps}× Runner-up</span>}
           {a.pointsTitles > 0 && <span class="chip accent">📈 {a.pointsTitles}× Points King</span>}

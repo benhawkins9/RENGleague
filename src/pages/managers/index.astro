@@ -1,7 +1,7 @@
 ---
 import Base from "../../layouts/Base.astro";
 import PageHeader from "../../components/PageHeader.astro";
-import { allTimeStandings, avatarUrl, getManager, managerColor, pct, record, ordinal } from "../../lib/data.js";
+import { allTimeStandings, avatarUrl, getManager, managerColor, isCommissioner, pct, record, ordinal } from "../../lib/data.js";
 ---
 
 <Base active="managers" title="Managers" description="The 12 dynasty managers — career stats and profiles.">
@@ -30,6 +30,7 @@ import { allTimeStandings, avatarUrl, getManager, managerColor, pct, record, ord
                 <div><span class="num">{a.bestFinish ? ordinal(a.bestFinish) : "—"}</span><label>Best finish</label></div>
               </div>
               <div class="mc-foot">
+                {isCommissioner(m.id) && <span class="chip purple">🏛️ Co-Commish</span>}
                 {a.titles > 0 && <span class="chip gold">🏆 {a.titles}× champ</span>}
                 {a.pointsTitles > 0 && <span class="chip accent">📈 {a.pointsTitles}× points king</span>}
                 <span class="chip">{a.seasons} seasons</span>

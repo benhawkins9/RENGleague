@@ -115,6 +115,7 @@ img { max-width: 100%; display: block; }
 .chip.accent { background: var(--accent-soft); color: var(--accent); border-color: rgba(46,230,166,.25); }
 .chip.hot { background: var(--hot-soft); color: var(--hot); border-color: rgba(255,93,108,.25); }
 .chip.blue { background: var(--accent-2-soft); color: var(--accent-2); border-color: rgba(84,166,255,.25); }
+.chip.purple { background: rgba(169,139,255,.14); color: #bca6ff; border-color: rgba(169,139,255,.30); }
 
 /* ---------- tables ---------- */
 table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }

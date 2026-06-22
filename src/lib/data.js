@@ -50,6 +50,11 @@ export const getManager = (id) => byId[id] || null;
 export const managerName = (id) => byId[id]?.name || "Unknown";
 export const managerAvatar = (id) => byId[id]?.avatar || null;
 
+// ---- league commissioners (single source of truth) ----
+// Big Monkey (@alleniverson) + OceanGate Titans (@OldManHawk)
+export const commissionerIds = ["470083698897711104", "470070299694460928"];
+export const isCommissioner = (id) => commissionerIds.includes(id);
+
 export const player = (id) => players[id] || { id, name: id, pos: null, team: null };
 
 // ---- stable per-manager color (for charts / bump lines / accents) ----
