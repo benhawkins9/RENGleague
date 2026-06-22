@@ -129,7 +129,7 @@ const rules = [
           <div class="row between" style="margin-bottom:14px"><h3 style="font-size:17px">🏈 {liveSeason} Field · {entrants.length} teams</h3><a href="/draft" class="chip accent">See the rookie draft →</a></div>
           <div class="grid cols-3">
             {entrants.map((e) => (
-              <a href={`/managers/${e.id}`} class="entrant" style={`--c:${managerColor(e.id)}`}><ManagerChip id={e.id} name={e.name} size={30} /></a>
+              <a href={`/managers/${e.id}`} class="entrant" style={`--c:${managerColor(e.id)}`}><ManagerChip id={e.id} name={e.name} size={30} link={false} /></a>
             ))}
           </div>
         </div>
