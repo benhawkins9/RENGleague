@@ -67,6 +67,8 @@ const seasonsOut = {};
 const allTimeWeekly = [];   // regular-season weeks only, for raw scoring records
 const h2h = {};
 const playerSeasonPoints = {};
+const allWaiverAdds = [];   // {season, managerId, playerId, faab, week} for FAAB records
+const txByManager = {};     // managerId -> {faabSpent, waiverClaims, faAdds, biggestBid}
 
 const pairKey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 
@@ -265,12 +267,29 @@ for (const season of SEASONS) {
       round: p.round, pickNo: p.pick_no, rosterId: p.roster_id, managerId: rosterToManager[p.roster_id],
       playerId: p.player_id, name: [meta.first_name, meta.last_name].filter(Boolean).join(" ") || players[p.player_id]?.name || p.player_id,
       pos: meta.position || players[p.player_id]?.pos, team: meta.team,
+      amount: meta.amount ? +meta.amount : null,
     };
   });
 
   const txAll = Object.values(transactions).flat();
   let tradeCount = 0;
-  for (const tx of txAll) if (tx.type === "trade") tradeCount++;
+  for (const tx of txAll) {
+    if (tx.type === "trade") { tradeCount++; continue; }
+    const mid = rosterToManager[(tx.roster_ids || [])[0]];
+    if (!mid) continue;
+    const e = (txByManager[mid] ||= { faabSpent: 0, waiverClaims: 0, faAdds: 0, biggestBid: 0 });
+    if (tx.type === "waiver" && tx.status === "complete") {
+      const bid = tx.settings?.waiver_bid ?? 0;
+      e.faabSpent += bid; e.waiverClaims++; e.biggestBid = Math.max(e.biggestBid, bid);
+      for (const pid of Object.keys(tx.adds || {})) {
+        referencedPlayers.add(pid);
+        allWaiverAdds.push({ season, managerId: mid, playerId: pid, faab: bid, week: tx.leg });
+      }
+    } else if (tx.type === "free_agent") {
+      e.faAdds++;
+      for (const pid of Object.keys(tx.adds || {})) referencedPlayers.add(pid);
+    }
+  }
 
   // strip heavy allWeekPoints from standings before output (only needed during compute)
   const standingsOut = standings.map(({ allWeekPoints, ...r }) => r);
@@ -281,6 +300,7 @@ for (const season of SEASONS) {
     regSeasonWeeks: REG_WEEKS,
     standings: standingsOut, power, playoffs, champion, runnerUp,
     pointsKing: pointsKing ? { managerId: pointsKing.managerId, teamName: pointsKing.teamName, pf: pointsKing.pf } : null,
+    draftType: drafts[0]?.type || null, auctionBudget: drafts[0]?.settings?.budget || null,
     draftBoard, transactions: { total: txAll.length, trades: tradeCount },
     rosterPositions: league.roster_positions,
   };
@@ -323,6 +343,7 @@ const managerList = Object.values(managers).map((m) => {
   const at = allTime[m.id] || {};
   const g = (at.w || 0) + (at.l || 0) + (at.t || 0);
   const apg = (at.allPlayW || 0) + (at.allPlayL || 0) + (at.allPlayT || 0);
+  const tx = txByManager[m.id] || {};
   return {
     id: m.id, name: m.name, displayName: m.displayName, avatar: m.avatar,
     seasonsPlayed: [...m.seasonsPlayed].sort(), teamNamesBySeason: m.teamNamesBySeason,
@@ -339,6 +360,7 @@ const managerList = Object.values(managers).map((m) => {
       bestSeed: at.bestSeed === 99 ? null : at.bestSeed,
       bestFinish: at.bestSeed === 99 ? null : at.bestSeed,
       finishes: at.finishes || {}, playoffResults: at.playoffResults || {}, luck: round(at.luck || 0, 2),
+      faabSpent: tx.faabSpent || 0, waiverClaims: tx.waiverClaims || 0, faAdds: tx.faAdds || 0, biggestBid: tx.biggestBid || 0,
     },
   };
 });
@@ -380,15 +402,45 @@ const h2hList = Object.values(h2h).map((r) => ({ a: r.a, b: r.b, aWins: r.aw, bW
 const playerTotalPoints = {};
 for (const season of SEASONS) for (const [pid, pts] of Object.entries(playerSeasonPoints[season] || {})) playerTotalPoints[pid] = round((playerTotalPoints[pid] || 0) + pts);
 const playedSeasons = SEASONS.filter((s) => seasonsOut[s].isComplete);
+// Rookie-draft steals/busts only (snake/linear). The auction is analyzed separately by $.
+const rookieSeasons = playedSeasons.filter((s) => seasonsOut[s].draftType !== "auction");
 const draftSteals = [];
-for (const season of playedSeasons)
+for (const season of rookieSeasons)
   for (const p of seasonsOut[season].draftBoard)
     draftSteals.push({ season, ...p, careerPoints: round(playerTotalPoints[p.playerId] || 0), firstYearPoints: round(playerSeasonPoints[season]?.[p.playerId] || 0) });
 const draftAnalysis = {
-  steals: [...draftSteals].filter((d) => d.pickNo > 12).sort((a, b) => b.careerPoints - a.careerPoints).slice(0, 12),
-  busts: [...draftSteals].filter((d) => d.pickNo <= 18 && d.careerPoints < 60).sort((a, b) => a.pickNo - b.pickNo).slice(0, 12),
-  bestByYear: playedSeasons.reduce((acc, s) => { acc[s] = draftSteals.filter((d) => d.season === s).sort((a, b) => b.careerPoints - a.careerPoints).slice(0, 3); return acc; }, {}),
+  steals: [...draftSteals].filter((d) => d.pickNo > 12).sort((a, b) => b.careerPoints - a.careerPoints).slice(0, 9),
+  busts: [...draftSteals].filter((d) => d.pickNo <= 18 && d.careerPoints < 60).sort((a, b) => a.pickNo - b.pickNo).slice(0, 9),
+  bestByYear: rookieSeasons.reduce((acc, s) => { acc[s] = draftSteals.filter((d) => d.season === s).sort((a, b) => b.careerPoints - a.careerPoints).slice(0, 3); return acc; }, {}),
 };
+
+// ---- FAAB / waiver records ----
+for (const wa of allWaiverAdds) {
+  wa.name = players[wa.playerId]?.name || wa.playerId;
+  wa.pos = players[wa.playerId]?.pos || null;
+  wa.seasonPoints = round(playerSeasonPoints[wa.season]?.[wa.playerId] || 0);
+}
+const faabRecords = {
+  bestPickups: [...allWaiverAdds].sort((a, b) => b.seasonPoints - a.seasonPoints).slice(0, 12),
+  biggestBids: [...allWaiverAdds].filter((w) => w.faab > 0).sort((a, b) => b.faab - a.faab).slice(0, 10),
+  bestValues: [...allWaiverAdds].filter((w) => w.faab >= 1 && w.seasonPoints >= 60).map((w) => ({ ...w, perDollar: round(w.seasonPoints / w.faab, 1) })).sort((a, b) => b.perDollar - a.perDollar).slice(0, 10),
+  totalFaab: allWaiverAdds.reduce((a, w) => a + w.faab, 0),
+  totalClaims: allWaiverAdds.length,
+};
+
+// ---- Auction (startup) records ----
+let auctionRecords = null;
+const auctionSeason = SEASONS.find((s) => seasonsOut[s].draftType === "auction");
+if (auctionSeason) {
+  const board = seasonsOut[auctionSeason].draftBoard.map((p) => ({ season: auctionSeason, managerId: p.managerId, playerId: p.playerId, name: p.name, pos: p.pos, team: p.team, amount: p.amount || 0, careerPoints: round(playerTotalPoints[p.playerId] || 0) }));
+  auctionRecords = {
+    season: auctionSeason,
+    budget: seasonsOut[auctionSeason].auctionBudget,
+    biggestBuys: [...board].sort((a, b) => b.amount - a.amount).slice(0, 12),
+    bestValues: [...board].filter((p) => p.amount >= 1).map((p) => ({ ...p, perDollar: round(p.careerPoints / p.amount, 1) })).sort((a, b) => b.perDollar - a.perDollar).slice(0, 10),
+    biggestBusts: [...board].filter((p) => p.amount >= 15).sort((a, b) => a.careerPoints - b.careerPoints).slice(0, 8),
+  };
+}
 
 // ---- Best individual player seasons ----
 const playerSeasonsFlat = [];
@@ -416,7 +468,7 @@ const league = {
   managers: managerList,
   seasons: seasonsOut,
   allTime: { standings: managerList.filter((m) => m.allTime.seasons > 0).sort((a, b) => b.allTime.titles - a.allTime.titles || b.allTime.winPct - a.allTime.winPct || b.allTime.pf - a.allTime.pf) },
-  headToHead: h2hList, records, vpRecords, draft: draftAnalysis, topPlayerSeasons,
+  headToHead: h2hList, records, vpRecords, faabRecords, auctionRecords, draft: draftAnalysis, topPlayerSeasons,
 };
 
 writeFileSync(join(OUT, "league.json"), JSON.stringify(league));

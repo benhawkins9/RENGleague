@@ -1,119 +1,172 @@
 ---
 import Base from "../layouts/Base.astro";
 import PageHeader from "../components/PageHeader.astro";
+import RankBars from "../components/RankBars.astro";
 import ManagerChip from "../components/ManagerChip.astro";
 import {
-  meta, seasons, completedSeasons, draft,
+  meta, seasons, allTimeStandings, draft, faabRecords, auctionRecords,
   managerColor, managerName, fmt,
 } from "../lib/data.js";
 
-// Steals & busts straight from the data layer (already sorted upstream).
-const steals = draft.steals;
-const busts = draft.busts;
-
-// Boards newest-first, including the just-completed 2026 rookie draft; picks grouped by round.
-const draftSeasons = [...meta.seasonOrder].reverse().filter((s) => (seasons[s].draftBoard || []).length > 0);
-const boards = draftSeasons.map((season) => {
-  const picks = seasons[season].draftBoard || [];
-  const roundNums = [...new Set(picks.map((p) => p.round))].sort((a, b) => a - b);
-  const rounds = roundNums.map((round) => ({
-    round,
-    picks: picks
-      .filter((p) => p.round === round)
-      .sort((a, b) => a.pickNo - b.pickNo),
+const A = auctionRecords;
+// FAAB spending leaderboard
+const faabLeaders = [...allTimeStandings]
+  .sort((a, b) => b.allTime.faabSpent - a.allTime.faabSpent)
+  .slice(0, 10)
+  .map((m) => ({
+    name: m.name, value: m.allTime.faabSpent, valueLabel: "$" + fmt(m.allTime.faabSpent),
+    color: managerColor(m.id), href: `/managers/${m.id}`,
+    sub: `${m.allTime.waiverClaims} claims · ${m.allTime.faAdds} free agents`,
   }));
-  const best = draft.bestByYear?.[season]?.[0] || null;
-  return { season, rounds, totalPicks: picks.length, best, upcoming: season === meta.upcomingSeason };
-});
+
+// rookie-draft boards (snake/linear), newest first — auction handled separately
+const rookieBoards = [...meta.seasonOrder].reverse()
+  .filter((s) => (seasons[s].draftBoard || []).length > 0 && seasons[s].draftType !== "auction")
+  .map((season) => {
+    const picks = seasons[season].draftBoard;
+    const rounds = [...new Set(picks.map((p) => p.round))].sort((a, b) => a - b)
+      .map((round) => ({ round, picks: picks.filter((p) => p.round === round).sort((a, b) => a.pickNo - b.pickNo) }));
+    return { season, rounds, totalPicks: picks.length, upcoming: season === meta.upcomingSeason, best: draft.bestByYear?.[season]?.[0] || null };
+  });
 ---
 
-<Base active="draft" title="Draft Room" description={`Every draft pick, steal and bust since 2023 in the ${meta.name} league.`}>
-  <PageHeader
-    eyebrow="The war room"
-    title="Draft Room"
-    sub="Every pick since 2023 — plus the steals that won titles and the busts that haunt the group chat."
-  />
+<Base active="draft" title="The Wire" description="FAAB, the waiver wire, the startup auction, and rookie drafts for the RENG dynasty league.">
+  <PageHeader eyebrow="How the dynasty gets built" title="The Wire"
+    sub="In a dynasty league, titles are won on the waiver wire and at the auction table. FAAB spent, the best dollar-store pickups, the $200 startup auction — and the rookie drafts, too." />
 
-  <!-- BIGGEST STEALS -->
+  <!-- ===================== FAAB & WAIVERS ===================== -->
   <section class="section-sm" style="padding-top:6px">
     <div class="wrap">
-      <div class="eyebrow">Late-round larceny</div>
-      <h2 class="section-title" style="font-size:clamp(22px,3vw,30px);margin:6px 0 16px">💎 Biggest Steals</h2>
-      <div class="panel panel-pad">
-        <p class="dim" style="font-size:12.5px;margin:0 0 18px">
-          Picks taken late that went on to print fantasy points in-league. The best dollar-store finds in dynasty history.
-        </p>
-        <div class="grid cols-3">
-          {steals.map((p) => (
-            <div class="pick-tile" style={`--mc:${managerColor(p.managerId)}`}>
-              <div class="pt-meta">
-                <span class="num">{p.season} · R{p.round} #{p.pickNo}</span>
-                <span class="chip accent" style="font-size:10.5px;padding:2px 8px">Steal</span>
+      <div class="row between wrap-gap" style="align-items:flex-end">
+        <div>
+          <div class="eyebrow">The waiver wire</div>
+          <h2 class="section-title" style="font-size:clamp(22px,3vw,30px)">💸 FAAB & Pickups</h2>
+        </div>
+        <span class="chip">${fmt(faabRecords.totalFaab)} spent · {faabRecords.totalClaims} claims all-time</span>
+      </div>
+
+      <div class="grid cols-2" style="margin-top:18px;align-items:start">
+        <div class="panel panel-pad">
+          <h3 style="font-size:16px;margin-bottom:4px">🏦 Most FAAB Spent</h3>
+          <p class="dim" style="font-size:12px;margin:0 0 16px">Total waiver budget burned across all seasons.</p>
+          <RankBars items={faabLeaders} />
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div class="panel panel-pad">
+            <h3 style="font-size:16px;margin-bottom:4px">💎 Best Waiver Pickups</h3>
+            <p class="dim" style="font-size:12px;margin:0 0 14px">Most fantasy points produced (that season) after a waiver claim — with what they paid.</p>
+            {faabRecords.bestPickups.slice(0, 6).map((w, i) => (
+              <div class="deal-row" style={`--c:${managerColor(w.managerId)}`}>
+                <span class="num dr-idx">{i + 1}</span>
+                <span class="dr-bid num">${w.faab}</span>
+                <div class="dr-mid">
+                  <span class="dr-name"><b>{w.name}</b> {w.pos && <span class={`tag-pos pos-${w.pos}`}>{w.pos}</span>}</span>
+                  <span class="dr-sub dim">{managerName(w.managerId)} · {w.season}</span>
+                </div>
+                <span class="num dr-pts">{fmt(w.seasonPoints)}<span class="dim" style="font-size:10px"> pts</span></span>
               </div>
-              <div class="pt-player">
-                <span class="pt-name">{p.name}</span>
-                <span class={`tag-pos pos-${p.pos}`}>{p.pos}</span>
-                {p.team && <span class="pt-team faint num">{p.team}</span>}
+            ))}
+          </div>
+
+          <div class="panel panel-pad">
+            <h3 style="font-size:16px;margin-bottom:4px">🤡 Biggest FAAB Splurges</h3>
+            <p class="dim" style="font-size:12px;margin:0 0 12px">The wildest winning bids in league history. Bold strategy.</p>
+            {faabRecords.biggestBids.slice(0, 5).map((w) => (
+              <div class="splurge">
+                <span class="num spl-bid">${w.faab}</span>
+                <span class="spl-name"><b>{w.name}</b> {w.pos && <span class={`tag-pos pos-${w.pos}`}>{w.pos}</span>}</span>
+                <span class="dim spl-who">{managerName(w.managerId)} · {w.season}</span>
               </div>
-              <ManagerChip id={p.managerId} size={26} />
-              <div class="pt-stat">
-                <span class="num pt-num">{fmt(p.careerPoints, 1)}</span>
-                <span class="pt-unit">league pts</span>
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- BIGGEST BUSTS -->
-  <section class="section-sm">
-    <div class="wrap">
-      <div class="eyebrow">Premium picks, discount returns</div>
-      <h2 class="section-title" style="font-size:clamp(22px,3vw,30px);margin:6px 0 16px">🪦 Biggest Busts</h2>
-      <div class="panel panel-pad">
-        <p class="dim" style="font-size:12.5px;margin:0 0 18px">
-          Spent early, delivered little. The premium capital that turned into screenshots in the group chat.
-        </p>
-        <div class="grid cols-3">
-          {busts.map((p) => (
-            <div class="pick-tile bust" style={`--mc:${managerColor(p.managerId)}`}>
-              <div class="pt-meta">
-                <span class="pt-pick num">Pick #{p.pickNo}</span>
-                <span class="chip hot" style="font-size:10.5px;padding:2px 8px">{p.season} · R{p.round}</span>
+  <!-- ===================== THE AUCTION ===================== -->
+  {A && (
+    <section class="section-sm">
+      <div class="wrap">
+        <div class="eyebrow">The startup</div>
+        <h2 class="section-title" style="font-size:clamp(22px,3vw,30px)">🔨 The {A.season} Auction</h2>
+        <p class="section-sub" style="margin-bottom:18px">The dynasty began with a <b>${A.budget} auction</b>. Here's where the money went — and the dollar-store legends who won titles.</p>
+
+        <div class="grid cols-3" style="align-items:start">
+          <div class="panel panel-pad">
+            <h3 style="font-size:15px;margin-bottom:4px">💵 Biggest Buys</h3>
+            <p class="dim" style="font-size:11.5px;margin:0 0 12px">Top winning bids of the auction</p>
+            {A.biggestBuys.slice(0, 6).map((p, i) => (
+              <div class="abuy">
+                <span class="num ab-rank">{i + 1}</span>
+                <span class="num ab-amt">${p.amount}</span>
+                <div class="ab-mid"><span class="ab-name"><b>{p.name}</b> {p.pos && <span class={`tag-pos pos-${p.pos}`}>{p.pos}</span>}</span><span class="dim" style="font-size:11px">{managerName(p.managerId)}</span></div>
+                <span class="num ab-pts dim">{fmt(p.careerPoints)}</span>
               </div>
-              <div class="pt-player">
-                <span class="pt-name">{p.name}</span>
-                <span class={`tag-pos pos-${p.pos}`}>{p.pos}</span>
-                {p.team && <span class="pt-team faint num">{p.team}</span>}
+            ))}
+          </div>
+
+          <div class="panel panel-pad" style="border-color:rgba(46,230,166,.25)">
+            <h3 style="font-size:15px;margin-bottom:4px">🪙 Best Bargains</h3>
+            <p class="dim" style="font-size:11.5px;margin:0 0 12px">Most career points per dollar spent</p>
+            {A.bestValues.slice(0, 6).map((p, i) => (
+              <div class="abuy">
+                <span class="num ab-rank">{i + 1}</span>
+                <span class="num ab-amt" style="color:var(--accent)">${p.amount}</span>
+                <div class="ab-mid"><span class="ab-name"><b>{p.name}</b> {p.pos && <span class={`tag-pos pos-${p.pos}`}>{p.pos}</span>}</span><span class="dim" style="font-size:11px">{managerName(p.managerId)}</span></div>
+                <span class="num ab-pts" style="color:var(--accent)">{fmt(p.careerPoints)}</span>
               </div>
-              <ManagerChip id={p.managerId} size={26} />
-              <div class="pt-stat">
-                <span class="num pt-num bust-num">{fmt(p.careerPoints, 1)}</span>
-                <span class="pt-unit">league pts</span>
+            ))}
+          </div>
+
+          <div class="panel panel-pad" style="border-color:rgba(255,93,108,.22)">
+            <h3 style="font-size:15px;margin-bottom:4px">🪦 Biggest Busts</h3>
+            <p class="dim" style="font-size:11.5px;margin:0 0 12px">Priciest buys ($15+) that flopped</p>
+            {A.biggestBusts.slice(0, 6).map((p, i) => (
+              <div class="abuy">
+                <span class="num ab-rank">{i + 1}</span>
+                <span class="num ab-amt" style="color:var(--hot)">${p.amount}</span>
+                <div class="ab-mid"><span class="ab-name"><b>{p.name}</b> {p.pos && <span class={`tag-pos pos-${p.pos}`}>{p.pos}</span>}</span><span class="dim" style="font-size:11px">{managerName(p.managerId)}</span></div>
+                <span class="num ab-pts" style="color:var(--hot)">{fmt(p.careerPoints)}</span>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
+  )}
 
-  <!-- THE BOARDS -->
+  <!-- ===================== ROOKIE DRAFTS ===================== -->
   <section class="section">
     <div class="wrap">
-      <div class="eyebrow">Pick by pick</div>
-      <h2 class="section-title" style="font-size:clamp(22px,3vw,30px);margin:6px 0 18px">📋 The Boards</h2>
+      <div class="eyebrow">The rookie pipeline</div>
+      <h2 class="section-title" style="font-size:clamp(22px,3vw,30px);margin-bottom:6px">🎯 Rookie Drafts</h2>
+      <p class="section-sub" style="margin-bottom:18px">Four-round rookie drafts each offseason. Newest first — the 2026 class just came in.</p>
+
+      {draft.steals.length > 0 && (
+        <div class="panel panel-pad" style="margin-bottom:18px">
+          <h3 style="font-size:15px;margin-bottom:12px">💎 Best Rookie-Draft Steals <span class="dim" style="font-weight:400;font-size:12px">— late picks who produced</span></h3>
+          <div class="grid cols-3">
+            {draft.steals.slice(0, 6).map((p) => (
+              <div class="steal" style={`--c:${managerColor(p.managerId)}`}>
+                <span class="dim num" style="font-size:11px">{p.season} · R{p.round} #{p.pickNo}</span>
+                <span class="st-name"><b>{p.name}</b> {p.pos && <span class={`tag-pos pos-${p.pos}`}>{p.pos}</span>}</span>
+                <span class="dim" style="font-size:11.5px">{managerName(p.managerId)} · <b style="color:var(--accent)">{fmt(p.careerPoints)}</b> pts</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div class="boards">
-        {boards.map(({ season, rounds, totalPicks, best, upcoming }) => (
+        {rookieBoards.map(({ season, rounds, totalPicks, best, upcoming }) => (
           <div class={`panel panel-pad board${upcoming ? " board-new" : ""}`}>
             <div class="board-head">
               <div class="row" style="gap:10px">
                 <h3 class="board-season num">{season}</h3>
                 {upcoming
-                  ? <span class="chip gold">🔥 Rookie draft · just drafted</span>
+                  ? <span class="chip gold">🔥 Just drafted</span>
                   : <span class="chip">{totalPicks} picks · {rounds.length} rounds</span>}
               </div>
               {best && (
@@ -121,27 +174,20 @@ const boards = draftSeasons.map((season) => {
                   <span class="bb-label">Best pick</span>
                   <span class={`tag-pos pos-${best.pos}`}>{best.pos}</span>
                   <strong style="color:var(--text)">{best.name}</strong>
-                  <span class="faint">·</span>
-                  <span style={`color:${managerColor(best.managerId)}`}>{managerName(best.managerId)}</span>
-                  <span class="faint">· {fmt(best.careerPoints, 1)} pts</span>
+                  <span class="faint">· {fmt(best.careerPoints)} pts</span>
                 </div>
               )}
             </div>
-
             <div class="rounds">
               {rounds.map(({ round, picks }) => (
                 <div class="round">
-                  <div class="round-label num">Round {round}</div>
+                  <div class="round-label num">R{round}</div>
                   <div class="round-picks">
                     {picks.map((p) => (
-                      <div
-                        class="dpick"
-                        style={`--mc:${managerColor(p.managerId)}`}
-                        title={managerName(p.managerId)}
-                      >
+                      <div class="dpick" style={`--mc:${managerColor(p.managerId)}`} title={managerName(p.managerId)}>
                         <span class="dp-no num">#{p.pickNo}</span>
                         <span class="dp-name">{p.name}</span>
-                        <span class={`tag-pos pos-${p.pos}`}>{p.pos}</span>
+                        {p.pos && <span class={`tag-pos pos-${p.pos}`}>{p.pos}</span>}
                       </div>
                     ))}
                   </div>
@@ -155,68 +201,46 @@ const boards = draftSeasons.map((season) => {
   </section>
 
   <style>
-    /* ---- shared pick tile (steals + busts) ---- */
-    .pick-tile {
-      display: flex; flex-direction: column; gap: 12px;
-      background: linear-gradient(180deg, var(--panel-2), var(--bg-2));
-      border: 1px solid var(--line);
-      border-left: 3px solid var(--mc);
-      border-radius: var(--radius-sm);
-      padding: 14px 15px;
-    }
-    .pt-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-    .pt-meta > .num { font-size: 12px; color: var(--muted); letter-spacing: .02em; }
-    .pt-pick { font-size: 13px; font-weight: 700; color: var(--text); }
-    .pt-player { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-    .pt-name { font-family: var(--display); font-weight: 700; font-size: 15px; }
-    .pt-team { font-size: 11px; letter-spacing: .04em; }
-    .pt-stat { display: flex; align-items: baseline; gap: 7px; border-top: 1px solid var(--line); padding-top: 11px; margin-top: 2px; }
-    .pt-num { font-size: 26px; font-weight: 700; line-height: 1; color: var(--accent); }
-    .bust-num { color: var(--hot); }
-    .pt-unit { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
+    .deal-row { display: grid; grid-template-columns: 16px 44px 1fr auto; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+    .deal-row:last-child { border: none; }
+    .dr-idx { color: var(--faint); font-weight: 700; font-size: 12px; }
+    .dr-bid { font-weight: 700; font-size: 14px; color: var(--orange); background: rgba(255,159,69,.12); border-radius: 6px; padding: 3px 0; text-align: center; }
+    .dr-mid { min-width: 0; display: flex; flex-direction: column; }
+    .dr-name { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dr-sub { font-size: 11px; }
+    .dr-pts { font-weight: 700; font-size: 16px; color: var(--accent); }
 
-    /* ---- the boards ---- */
-    .boards { display: flex; flex-direction: column; gap: 18px; }
+    .splurge { display: grid; grid-template-columns: 50px 1fr auto; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+    .splurge:last-child { border: none; }
+    .spl-bid { font-weight: 700; font-size: 15px; color: var(--hot); }
+    .spl-name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .spl-who { font-size: 11px; text-align: right; white-space: nowrap; }
+
+    .abuy { display: grid; grid-template-columns: 14px 42px 1fr auto; align-items: center; gap: 9px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+    .abuy:last-child { border: none; }
+    .ab-rank { color: var(--faint); font-weight: 700; font-size: 11px; }
+    .ab-amt { font-weight: 700; font-size: 15px; }
+    .ab-mid { min-width: 0; display: flex; flex-direction: column; }
+    .ab-name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ab-pts { font-weight: 700; font-size: 14px; }
+
+    .steal { display: flex; flex-direction: column; gap: 5px; padding: 12px 14px; background: var(--bg-2); border: 1px solid var(--line); border-left: 3px solid var(--c); border-radius: var(--radius-sm); }
+    .st-name { font-family: var(--display); font-weight: 600; font-size: 14.5px; }
+
+    .boards { display: flex; flex-direction: column; gap: 16px; }
     .board-new { border-color: rgba(255,207,74,.32); box-shadow: 0 0 0 1px rgba(255,207,74,.12), var(--shadow); }
-    .board-head {
-      display: flex; align-items: center; justify-content: space-between;
-      gap: 14px; flex-wrap: wrap;
-      border-bottom: 1px solid var(--line); padding-bottom: 14px; margin-bottom: 16px;
-    }
-    .board-season { font-size: 26px; font-weight: 700; }
+    .board-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 14px; }
+    .board-season { font-size: 24px; font-weight: 700; }
     .board-best { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 12.5px; }
-    .bb-label {
-      font-family: var(--display); text-transform: uppercase; letter-spacing: .1em;
-      font-size: 10.5px; font-weight: 600; color: var(--accent);
-    }
-
-    .rounds { display: flex; flex-direction: column; gap: 14px; }
-    .round { display: grid; grid-template-columns: 74px 1fr; gap: 12px; align-items: start; }
-    .round-label {
-      font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
-      color: var(--muted); padding-top: 7px;
-    }
+    .bb-label { font-family: var(--display); text-transform: uppercase; letter-spacing: .1em; font-size: 10.5px; font-weight: 600; color: var(--accent); }
+    .rounds { display: flex; flex-direction: column; gap: 12px; }
+    .round { display: grid; grid-template-columns: 40px 1fr; gap: 12px; align-items: start; }
+    .round-label { font-size: 12px; font-weight: 700; color: var(--muted); padding-top: 6px; }
     .round-picks { display: flex; flex-wrap: wrap; gap: 7px; }
-
-    .dpick {
-      display: inline-flex; align-items: center; gap: 7px;
-      max-width: 100%;
-      padding: 5px 9px 5px 8px; border-radius: 7px;
-      background: var(--panel); border: 1px solid var(--line);
-      border-left: 2.5px solid var(--mc);
-      transition: border-color .14s, background .14s;
-    }
-    .dpick:hover { background: var(--panel-3); border-color: var(--line-2); border-left-color: var(--mc); }
-    .dp-no { font-size: 11px; font-weight: 700; color: var(--faint); flex-shrink: 0; }
-    .dp-name {
-      font-size: 12.5px; font-weight: 600; color: var(--text);
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px;
-    }
-
-    @media (max-width: 620px) {
-      .round { grid-template-columns: 1fr; gap: 6px; }
-      .round-label { padding-top: 0; }
-      .dp-name { max-width: 44vw; }
-    }
+    .dpick { display: inline-flex; align-items: center; gap: 7px; padding: 5px 9px 5px 8px; border-radius: 7px; background: var(--panel); border: 1px solid var(--line); border-left: 2.5px solid var(--mc); }
+    .dpick:hover { background: var(--panel-3); }
+    .dp-no { font-size: 11px; font-weight: 700; color: var(--faint); }
+    .dp-name { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+    @media (max-width: 620px) { .round { grid-template-columns: 1fr; gap: 5px; } .round-label { padding-top: 0; } .dp-name { max-width: 44vw; } }
   </style>
 </Base>

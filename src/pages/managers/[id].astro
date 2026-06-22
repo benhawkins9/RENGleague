@@ -168,7 +168,12 @@ const resultFor = (season, seed) => {
         ))}
       </div>
       <div class="panel panel-pad">
-        <h3 style="font-size:16px;margin-bottom:14px">🎯 Draft Legacy</h3>
+        <h3 style="font-size:16px;margin-bottom:8px">🎯 Draft & Waiver Wire</h3>
+        <div class="faab-line">
+          <span><b class="num">${fmt(a.faabSpent)}</b> FAAB spent</span>
+          <span><b class="num">{a.waiverClaims}</b> waiver claims</span>
+          <span><b class="num">{a.faAdds}</b> free agents</span>
+        </div>
         {mySteals.length > 0 ? (
           <>
             <p class="eyebrow" style="color:var(--accent)">Steals</p>
@@ -214,6 +219,8 @@ const resultFor = (season, seed) => {
     .wk-pts { font-size: 20px; font-weight: 700; width: 64px; }
     .draft-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
     .draft-row:last-child { border: none; }
+    .faab-line { display: flex; flex-wrap: wrap; gap: 14px; padding: 8px 0 12px; margin-bottom: 6px; border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
+    .faab-line b { color: var(--text); font-size: 14px; }
     @media (max-width: 620px) { .hero-grid { flex-direction: column; text-align: center; align-items: flex-start; } }
   </style>
 </Base>

@@ -32,6 +32,8 @@ export const allTimeStandings = league.allTime.standings;
 export const headToHead = league.headToHead;
 export const records = league.records;
 export const vpRecords = league.vpRecords;
+export const faabRecords = league.faabRecords;
+export const auctionRecords = league.auctionRecords;
 export const draft = league.draft;
 export const topPlayerSeasons = league.topPlayerSeasons;
 
