@@ -5,10 +5,18 @@ import StatCard from "../components/StatCard.astro";
 import RankBars from "../components/RankBars.astro";
 import ManagerChip from "../components/ManagerChip.astro";
 import TradeCard from "../components/TradeCard.astro";
-import { trades, tradeAnalytics, managers, allTimeStandings, getManager, managerName, managerColor, avatarUrl, fmt } from "../lib/data.js";
+import { trades, tradeAnalytics, managers, allTimeStandings, dynasty, pickTiers, getManager, managerName, managerColor, avatarUrl, fmt } from "../lib/data.js";
 
 const A = tradeAnalytics;
 const totalTrades = trades.length;
+
+// ---- Trade Machine data (client-side) ----
+const tmTeams = (dynasty?.teams || []).map((t) => ({
+  id: t.managerId, name: managerName(t.managerId), color: managerColor(t.managerId),
+  avgAge: t.avgAge, totalValue: t.totalValue,
+  players: t.players.map((p) => ({ id: p.id, name: p.name, pos: p.pos, value: p.value, age: p.age, trend30: p.trend30 })),
+})).sort((a, b) => a.name.localeCompare(b.name));
+const tmData = { teams: tmTeams, picks: pickTiers };
 
 // most active
 const traderBars = [...managers].filter((m) => m.allTime.trades > 0).sort((a, b) => b.allTime.trades - a.allTime.trades)
@@ -38,6 +46,168 @@ const pairTint = (n) => (n <= 0 ? "transparent" : `color-mix(in srgb, var(--acce
 <Base active="trades" title="Trades" description="Every trade, plus trade-partner heatmaps, blockbusters, buyers vs sellers and player journeys.">
   <PageHeader eyebrow="The trade block" title="Trades"
     sub="Every deal in league history — who deals with whom, the blockbusters, the rebuilders vs. win-now buyers, and the players who got passed around." />
+
+  <!-- ===== TRADE MACHINE ===== -->
+  <section class="section-sm" id="machine">
+    <div class="wrap">
+      <div class="panel panel-pad tm">
+        <h2 class="tm-title">⚖️ Trade Machine</h2>
+        <p class="dim" style="font-size:13px;margin:4px 0 0">Pick two teams, click players to build a deal, and see if it's fair by FantasyCalc dynasty value. Add picks, get a contention-aware suggestion, then screenshot it to send.</p>
+        <div class="tm-grid">
+          <div class="tm-side" data-side="a">
+            <select class="tm-team" data-side="a" aria-label="Team A"></select>
+            <div class="tm-give">Gives <b class="num" data-total="a">0</b></div>
+            <div class="tm-picks" data-picks="a"></div>
+            <select class="tm-pick" data-side="a" aria-label="Add pick to A"></select>
+            <div class="tm-pool" data-pool="a"></div>
+          </div>
+          <div class="tm-mid">
+            <div class="tm-verdict" id="tm-verdict">Pick two teams</div>
+            <div class="tm-balance"><span id="tm-bal-a"></span><span id="tm-bal-b"></span></div>
+            <div class="tm-diff dim" id="tm-diff"></div>
+            <button class="tm-btn tm-suggest" id="tm-suggest">💡 Suggest a deal</button>
+            <button class="tm-btn tm-share" id="tm-share">📸 Screenshot</button>
+            <button class="tm-btn tm-clear" id="tm-clear">Clear</button>
+            <p class="dim tm-note">Suggestions factor each team's win-now vs. rebuild lean (age + value).</p>
+          </div>
+          <div class="tm-side" data-side="b">
+            <select class="tm-team" data-side="b" aria-label="Team B"></select>
+            <div class="tm-give">Gives <b class="num" data-total="b">0</b></div>
+            <div class="tm-picks" data-picks="b"></div>
+            <select class="tm-pick" data-side="b" aria-label="Add pick to B"></select>
+            <div class="tm-pool" data-pool="b"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script type="application/json" id="tm-data" set:html={JSON.stringify(tmData)}></script>
+    <canvas id="tm-canvas" style="display:none"></canvas>
+    <script is:inline>
+      (() => {
+        const dataEl = document.getElementById("tm-data");
+        if (!dataEl) return;
+        const D = JSON.parse(dataEl.textContent);
+        const teams = D.teams, picks = D.picks;
+        const byId = Object.fromEntries(teams.map((t) => [t.id, t]));
+        const mean = (a) => a.reduce((x, y) => x + y, 0) / (a.length || 1);
+        const ages = teams.map((t) => t.avgAge), vals = teams.map((t) => t.totalValue);
+        const mA = mean(ages), mV = mean(vals);
+        const sd = (a, m) => Math.sqrt(mean(a.map((x) => (x - m) ** 2))) || 1;
+        const sA = sd(ages, mA), sV = sd(vals, mV);
+        const lean = {}; teams.forEach((t) => (lean[t.id] = 0.6 * ((t.avgAge - mA) / sA) + 0.4 * ((t.totalValue - mV) / sV)));
+
+        const sel = { a: new Set(), b: new Set() };
+        const addedPicks = { a: [], b: [] };
+        const team = { a: null, b: null };
+        const fmtV = (v) => (v >= 1000 ? (v / 1000).toFixed(1) + "k" : String(Math.round(v)));
+        const totalFor = (side) => { let s = 0; const t = byId[team[side]]; if (t) for (const p of t.players) if (sel[side].has(p.id)) s += p.value; for (const pk of addedPicks[side]) s += pk.value; return s; };
+
+        document.querySelectorAll(".tm-team").forEach((s) => {
+          s.innerHTML = '<option value="">Select team…</option>' + teams.map((t) => `<option value="${t.id}">${t.name}</option>`).join("");
+          s.addEventListener("change", () => { const sd2 = s.dataset.side; team[sd2] = s.value || null; sel[sd2].clear(); addedPicks[sd2] = []; renderPool(sd2); render(); });
+        });
+        document.querySelectorAll(".tm-pick").forEach((s) => {
+          s.innerHTML = '<option value="">+ add draft pick…</option>' + picks.map((p, i) => `<option value="${i}">${p.label} · ${fmtV(p.value)}</option>`).join("");
+          s.addEventListener("change", () => { const i = s.value; if (i !== "") { addedPicks[s.dataset.side].push({ ...picks[+i] }); s.value = ""; render(); } });
+        });
+
+        function renderPool(side) {
+          const pool = document.querySelector(`[data-pool="${side}"]`);
+          const t = byId[team[side]];
+          if (!t) { pool.innerHTML = '<p class="tm-empty dim">Select a team to see its roster.</p>'; return; }
+          pool.innerHTML = t.players.map((p) => `<button type="button" class="tm-p${sel[side].has(p.id) ? " on" : ""}" data-pid="${p.id}"><span class="tm-pp"><span class="tag-pos pos-${p.pos}">${p.pos || "?"}</span>${p.name}</span><span class="num tm-pv">${fmtV(p.value)}</span></button>`).join("");
+          pool.querySelectorAll(".tm-p").forEach((b) => b.addEventListener("click", () => { const id = b.dataset.pid; if (sel[side].has(id)) sel[side].delete(id); else sel[side].add(id); b.classList.toggle("on"); render(); }));
+        }
+
+        function render() {
+          ["a", "b"].forEach((side) => {
+            document.querySelector(`[data-total="${side}"]`).textContent = fmtV(totalFor(side));
+            const pc = document.querySelector(`[data-picks="${side}"]`);
+            pc.innerHTML = addedPicks[side].map((pk, i) => `<span class="tm-chip" data-i="${i}">${pk.label} · ${fmtV(pk.value)} ✕</span>`).join("");
+            pc.querySelectorAll(".tm-chip").forEach((c) => c.addEventListener("click", () => { addedPicks[side].splice(+c.dataset.i, 1); render(); }));
+          });
+          const va = totalFor("a"), vb = totalFor("b");
+          const vEl = document.getElementById("tm-verdict"), dEl = document.getElementById("tm-diff");
+          const ba = document.getElementById("tm-bal-a"), bb = document.getElementById("tm-bal-b");
+          if (!team.a || !team.b) { vEl.textContent = "Pick two teams"; vEl.className = "tm-verdict"; dEl.textContent = ""; ba.style.width = "50%"; bb.style.width = "50%"; return; }
+          const tot = va + vb || 1; ba.style.width = (va / tot * 100) + "%"; bb.style.width = (vb / tot * 100) + "%";
+          ba.style.background = byId[team.a].color; bb.style.background = byId[team.b].color;
+          if (va === 0 && vb === 0) { vEl.textContent = "Add players to start"; vEl.className = "tm-verdict"; dEl.textContent = ""; return; }
+          const diff = Math.abs(va - vb), pct = diff / Math.max(va, vb);
+          const w = va > vb ? "b" : "a"; // the side that gives LESS comes out ahead
+          let txt, cls;
+          if (pct < 0.05) { txt = "⚖️ Even deal"; cls = "ok"; }
+          else if (pct < 0.12) { txt = `Fair — edge ${byId[team[w]].name}`; cls = "ok"; }
+          else { txt = `Lopsided — ${byId[team[w]].name} wins`; cls = "bad"; }
+          vEl.textContent = txt; vEl.className = "tm-verdict " + cls;
+          dEl.textContent = `${fmtV(va)} vs ${fmtV(vb)} · ${fmtV(diff)} (${Math.round(pct * 100)}%) apart`;
+        }
+
+        document.getElementById("tm-suggest").addEventListener("click", () => {
+          if (!team.a || !team.b || team.a === team.b) return;
+          const contSide = lean[team.a] >= lean[team.b] ? "a" : "b";
+          const rebSide = contSide === "a" ? "b" : "a";
+          const C = byId[team[contSide]], R = byId[team[rebSide]];
+          const give = [...R.players].filter((p) => p.value > 800).sort((x, y) => (y.value + (y.age > 26 ? 400 : 0)) - (x.value + (x.age > 26 ? 400 : 0)))[0];
+          if (!give) return;
+          sel.a.clear(); sel.b.clear(); addedPicks.a = []; addedPicks.b = [];
+          sel[rebSide].add(give.id);
+          const target = give.value; // contender pays ~target + a small rebuild premium
+          let acc = 0;
+          const young = [...C.players].filter((p) => p.value > 400).sort((x, y) => (x.age - y.age) || (y.value - x.value));
+          for (const p of young) { if (acc >= target * 0.95) break; if (acc + p.value <= target * 1.08) { sel[contSide].add(p.id); acc += p.value; } }
+          const needed = target * 1.04 - acc;
+          if (needed > 250 && picks.length) { const pk = [...picks].sort((x, y) => Math.abs(x.value - needed) - Math.abs(y.value - needed))[0]; addedPicks[contSide].push({ ...pk }); }
+          renderPool("a"); renderPool("b"); render();
+        });
+
+        document.getElementById("tm-clear").addEventListener("click", () => { sel.a.clear(); sel.b.clear(); addedPicks.a = []; addedPicks.b = []; renderPool("a"); renderPool("b"); render(); });
+
+        document.getElementById("tm-share").addEventListener("click", () => {
+          if (!team.a || !team.b) return;
+          const assetsOf = (side) => { const t = byId[team[side]]; const ps = t.players.filter((p) => sel[side].has(p.id)).map((p) => ({ n: p.name, v: p.value })); const pk = addedPicks[side].map((p) => ({ n: p.label, v: p.value })); return [...ps, ...pk]; };
+          const AA = assetsOf("a"), BB = assetsOf("b");
+          if (!AA.length && !BB.length) return;
+          const va = totalFor("a"), vb = totalFor("b");
+          const W = 920, rowH = 32, headH = 158, footH = 54;
+          const H = headH + Math.max(AA.length, BB.length, 1) * rowH + footH;
+          const colX = { a: 36, b: 488 }, colW = 396;
+          const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+          const diff = Math.abs(va - vb), pct = va || vb ? diff / Math.max(va, vb) : 0;
+          const verdict = pct < 0.05 ? "⚖️ Even deal" : pct < 0.12 ? "Fair deal" : "Lopsided";
+          let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+          svg += `<rect width="${W}" height="${H}" fill="#0b0f1a"/><rect width="${W}" height="6" fill="#2ee6a6"/>`;
+          svg += `<text x="${W / 2}" y="50" text-anchor="middle" fill="#e8edf7" font-family="Arial,sans-serif" font-size="27" font-weight="bold">RENG Trade Machine</text>`;
+          svg += `<text x="${W / 2}" y="80" text-anchor="middle" fill="#8b97ad" font-family="Arial,sans-serif" font-size="15">${verdict} · ${esc(fmtV(diff))} value apart</text>`;
+          ["a", "b"].forEach((side) => { const t = byId[team[side]], x = colX[side]; svg += `<rect x="${x}" y="104" width="${colW}" height="36" rx="8" fill="${t.color}" opacity="0.18"/><text x="${x + 14}" y="129" fill="${t.color}" font-family="Arial,sans-serif" font-size="17" font-weight="bold">${esc(t.name)}</text><text x="${x + colW - 12}" y="129" text-anchor="end" fill="#e8edf7" font-family="Arial,sans-serif" font-size="16" font-weight="bold">${esc(fmtV(side === "a" ? va : vb))}</text>`; });
+          [["a", AA], ["b", BB]].forEach(([side, arr]) => { const x = colX[side]; arr.forEach((it, i) => { const y = headH + i * rowH + 22; svg += `<text x="${x + 14}" y="${y}" fill="#cdd6e6" font-family="Arial,sans-serif" font-size="15">${esc(it.n)}</text><text x="${x + colW - 12}" y="${y}" text-anchor="end" fill="#8b97ad" font-family="Arial,sans-serif" font-size="13">${esc(fmtV(it.v))}</text>`; }); });
+          svg += `<line x1="${W / 2}" y1="150" x2="${W / 2}" y2="${H - footH}" stroke="#1c2333" stroke-width="1"/>`;
+          svg += `<text x="${W / 2}" y="${H - 20}" text-anchor="middle" fill="#5a6680" font-family="Arial,sans-serif" font-size="13">rengleague.com · dynasty values via FantasyCalc</text></svg>`;
+          const canvas = document.getElementById("tm-canvas"); canvas.width = W; canvas.height = H;
+          const ctx = canvas.getContext("2d");
+          const img = new Image();
+          const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+          img.onload = () => {
+            ctx.drawImage(img, 0, 0); URL.revokeObjectURL(url);
+            canvas.toBlob((png) => {
+              if (!png) return;
+              const file = new File([png], "reng-trade.png", { type: "image/png" });
+              if (navigator.canShare && navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: "RENG Trade" }).catch(() => {}); }
+              else { const a = document.createElement("a"); a.href = URL.createObjectURL(png); a.download = "reng-trade.png"; a.click(); }
+            }, "image/png");
+          };
+          img.src = url;
+        });
+
+        const m = location.hash.match(/tm=(\d+)/);
+        const a0 = m && byId[m[1]] ? m[1] : teams[0].id;
+        const b0 = (teams.find((t) => t.id !== a0) || teams[0]).id;
+        document.querySelector('.tm-team[data-side="a"]').value = a0; team.a = a0;
+        document.querySelector('.tm-team[data-side="b"]').value = b0; team.b = b0;
+        renderPool("a"); renderPool("b"); render();
+      })();
+    </script>
+  </section>
 
   <section class="section-sm">
     <div class="wrap">
@@ -165,6 +335,48 @@ const pairTint = (n) => (n <= 0 ? "transparent" : `color-mix(in srgb, var(--acce
       </div>
     </div>
   </section>
+
+  <!-- Trade Machine styles are global: its rows/chips are built via runtime innerHTML,
+       which Astro's scoped CSS does not reach. The .tm- prefix keeps this collision-safe. -->
+  <style is:global>
+    .tm-title { font-size: 19px; }
+    .tm-grid { display: grid; grid-template-columns: 1fr 188px 1fr; gap: 16px; align-items: start; margin-top: 18px; }
+    .tm-side { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+    .tm-team { width: 100%; padding: 10px 11px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line-2); color: var(--text); font-size: 14px; font-weight: 700; font-family: var(--display); }
+    .tm-give { display: flex; align-items: baseline; justify-content: space-between; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    .tm-give b { font-size: 21px; color: var(--accent); font-family: var(--display); }
+    .tm-picks { display: flex; flex-wrap: wrap; gap: 5px; }
+    .tm-picks:empty { display: none; }
+    .tm-chip { font-size: 11px; background: var(--gold-soft); color: var(--gold); border: 1px solid rgba(255,207,74,.28); border-radius: 6px; padding: 3px 7px; cursor: pointer; }
+    .tm-chip:hover { filter: brightness(1.1); }
+    .tm-pick { width: 100%; padding: 8px 10px; border-radius: 8px; background: var(--bg-2); border: 1px dashed var(--line-2); color: var(--muted); font-size: 12.5px; }
+    .tm-pool { display: flex; flex-direction: column; gap: 2px; max-height: 330px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; padding: 6px; background: var(--bg); }
+    .tm-p { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 9px; border-radius: 7px; background: transparent; border: 1px solid transparent; cursor: pointer; text-align: left; width: 100%; transition: background .1s; appearance: none; -webkit-appearance: none; color: var(--text); font: inherit; }
+    .tm-p:hover { background: var(--panel-2); }
+    .tm-p.on { background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: color-mix(in srgb, var(--accent) 38%, transparent); }
+    .tm-pp { display: flex; align-items: center; gap: 7px; font-size: 13px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tm-pp .tag-pos { flex-shrink: 0; }
+    .tm-pv { font-size: 12px; color: var(--muted); flex-shrink: 0; font-weight: 600; }
+    .tm-p.on .tm-pv { color: var(--accent); }
+    .tm-mid { display: flex; flex-direction: column; gap: 8px; align-items: stretch; padding-top: 30px; }
+    .tm-verdict { text-align: center; font-family: var(--display); font-weight: 700; font-size: 14px; padding: 11px 8px; border-radius: 10px; background: var(--panel-2); line-height: 1.25; }
+    .tm-verdict.ok { background: var(--accent-soft); color: var(--accent); }
+    .tm-verdict.bad { background: var(--hot-soft); color: var(--hot); }
+    .tm-balance { display: flex; height: 8px; border-radius: 999px; overflow: hidden; background: var(--panel-3); }
+    .tm-balance span { display: block; height: 100%; transition: width .25s; }
+    .tm-diff { text-align: center; font-size: 11px; }
+    .tm-btn { padding: 10px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--panel-2); color: var(--text); font-weight: 700; font-size: 13px; cursor: pointer; transition: filter .12s; }
+    .tm-btn:hover { filter: brightness(1.1); }
+    .tm-suggest { background: var(--accent); color: #06140e; border-color: transparent; }
+    .tm-share { background: var(--accent-2-soft); color: var(--accent-2); border-color: transparent; }
+    .tm-note { font-size: 10px; text-align: center; line-height: 1.4; margin: 2px 0 0; }
+    .tm-empty { font-size: 12.5px; padding: 16px 8px; text-align: center; margin: 0; }
+    @media (max-width: 900px) {
+      .tm-grid { grid-template-columns: 1fr; }
+      .tm-mid { padding-top: 4px; }
+      .tm-pool { max-height: 260px; }
+    }
+  </style>
 
   <style>
     .blue-t { color: var(--accent-2); }
