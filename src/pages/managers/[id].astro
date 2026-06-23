@@ -3,7 +3,7 @@ import Base from "../../layouts/Base.astro";
 import StatCard from "../../components/StatCard.astro";
 import ManagerChip from "../../components/ManagerChip.astro";
 import {
-  managers, seasons, completedSeasons, headToHead, draft, acquisition, dynasty,
+  meta, managers, seasons, completedSeasons, headToHead, draft, acquisition, dynasty, recentMoves,
   getManager, managerName, managerColor, avatarUrl, isCommissioner, fmt, pct, signed, record, ordinal,
 } from "../../lib/data.js";
 
@@ -64,6 +64,19 @@ const acqSources = [
 const dyn = dynasty?.teams.find((t) => t.managerId === id);
 const fmtV = (v) => (v / 1000).toFixed(1) + "k";
 
+// current roster grouped by position (value-sorted)
+const roster = dyn?.players || [];
+const POS_ORDER = ["QB", "RB", "WR", "TE", "K", "DEF"];
+const byPos = {};
+for (const p of roster) (byPos[p.pos || "?"] ||= []).push(p);
+for (const k in byPos) byPos[k].sort((x, y) => y.value - x.value);
+const posGroups = [...POS_ORDER.filter((p) => byPos[p]), ...Object.keys(byPos).filter((p) => !POS_ORDER.includes(p))]
+  .map((p) => ({ pos: p, players: byPos[p] }));
+
+// recent transactions (current season)
+const moves = recentMoves[id] || [];
+const moveLabel = (mv) => mv.type === "trade" ? "⇄ Trade" : mv.type === "waiver" ? `💰 Waiver${mv.bid != null ? " $" + mv.bid : ""}` : "➕ Free agent";
+
 // Playoff result per season (champion / runner-up / final 4 / play-in / missed)
 const resultFor = (season, seed) => {
   const r = a.playoffResults[season];
@@ -91,6 +104,58 @@ const resultFor = (season, seed) => {
           {a.bestSeed && <span class="chip">Best seed: {ordinal(a.bestSeed)}</span>}
           {a.lastPlace > 0 && <span class="chip hot">💩 {a.lastPlace}× last in VP</span>}
         </div>
+        <div class="hero-actions">
+          <a class="act act-trade" href={`/trades#tm=${id}`}>⚖️ Propose a Trade</a>
+          <a class="act act-dm" href={`https://sleeper.com/messages/${id}`} target="_blank" rel="noopener">💬 Message on Sleeper</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- current roster + recent moves -->
+  <section class="section-sm">
+    <div class="wrap grid cols-2" style="align-items:start">
+      <div class="panel panel-pad">
+        <div class="row between" style="align-items:baseline;margin-bottom:14px">
+          <h3 style="font-size:16px">📋 Current Roster <span class="dim" style="font-size:13px;font-weight:400">· {roster.length}</span></h3>
+          {dyn && <span class="dim" style="font-size:12.5px">value <b style="color:var(--accent)">{fmtV(dyn.totalValue)}</b> · <a href="/dynasty" style="color:var(--accent-2)">#{dyn.rank}</a></span>}
+        </div>
+        {roster.length ? (
+          <div class="roster-grid">
+            {posGroups.map((g) => (
+              <div class="pos-col">
+                <div class="pos-head"><span class={`tag-pos pos-${g.pos}`}>{g.pos}</span><span class="dim num">{g.players.length}</span></div>
+                {g.players.map((p) => (
+                  <div class="ros-row">
+                    <span class="ros-name">{p.name}</span>
+                    <span class="ros-meta">
+                      {p.trend30 ? <span class={p.trend30 > 0 ? "pos" : "neg"} style="font-size:9px">{p.trend30 > 0 ? "▲" : "▼"}</span> : null}
+                      <span class="num ros-val">{fmtV(p.value)}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        ) : <p class="dim" style="font-size:13px">No current roster on record.</p>}
+      </div>
+
+      <div class="panel panel-pad">
+        <h3 style="font-size:16px;margin-bottom:4px">🔄 Recent Moves <span class="dim" style="font-size:13px;font-weight:400">· {meta.currentSeason}</span></h3>
+        {moves.length ? (
+          <div class="moves">
+            {moves.map((mv) => (
+              <div class="move">
+                <span class={`mv-badge mv-${mv.type}`}>{moveLabel(mv)}</span>
+                <div class="mv-body">
+                  {(mv.in.length || mv.picksIn?.length) ? <div class="mv-line"><span class="mv-dir pos">IN</span><span>{mv.in.map((p) => p.name).concat(mv.picksIn || []).join(", ")}</span></div> : null}
+                  {(mv.out.length || mv.picksOut?.length) ? <div class="mv-line"><span class="mv-dir neg">OUT</span><span>{mv.out.map((p) => p.name).concat(mv.picksOut || []).join(", ")}</span></div> : null}
+                  {mv.partnerId && <div class="mv-partner dim">with {managerName(mv.partnerId)}</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : <p class="dim" style="font-size:13px">No moves recorded this season yet.</p>}
       </div>
     </div>
   </section>
@@ -272,6 +337,31 @@ const resultFor = (season, seed) => {
     .dyn-val label { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 2px; }
     .dyn-top { display: flex; flex-wrap: wrap; gap: 6px; }
     .dyn-chip { font-size: 12px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; }
+    .hero-actions { display: flex; gap: 9px; margin-top: 16px; flex-wrap: wrap; }
+    .act { display: inline-flex; align-items: center; gap: 6px; padding: 9px 15px; border-radius: 10px; font-size: 13.5px; font-weight: 700; transition: filter .14s, transform .12s; }
+    .act:hover { transform: translateY(-1px); }
+    .act-trade { background: var(--c); color: #06140e; }
+    .act-trade:hover { filter: brightness(1.1); }
+    .act-dm { background: var(--panel-2); border: 1px solid var(--line-2); color: var(--text); }
+    .act-dm:hover { border-color: var(--c); }
+    .roster-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px 18px; }
+    .pos-col { min-width: 0; }
+    .pos-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 6px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+    .ros-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; font-size: 13px; }
+    .ros-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ros-meta { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; }
+    .ros-val { font-size: 12px; color: var(--muted); font-weight: 600; }
+    .moves { display: flex; flex-direction: column; gap: 9px; }
+    .move { display: flex; gap: 11px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+    .move:last-child { border: none; }
+    .mv-badge { flex-shrink: 0; font-size: 11px; font-weight: 700; padding: 4px 9px; border-radius: 7px; height: fit-content; white-space: nowrap; background: var(--panel-3); }
+    .mv-badge.mv-trade { background: rgba(169,139,255,.15); color: #bca6ff; }
+    .mv-badge.mv-waiver { background: var(--gold-soft); color: var(--gold); }
+    .mv-badge.mv-free_agent { background: var(--accent-2-soft); color: var(--accent-2); }
+    .mv-body { font-size: 13px; min-width: 0; }
+    .mv-line { display: flex; gap: 7px; padding: 1px 0; }
+    .mv-dir { font-size: 9.5px; font-weight: 800; width: 26px; flex-shrink: 0; padding-top: 2px; }
+    .mv-partner { font-size: 11.5px; margin-top: 2px; }
     @media (max-width: 620px) { .hero-grid { flex-direction: column; text-align: center; align-items: flex-start; } }
   </style>
 </Base>

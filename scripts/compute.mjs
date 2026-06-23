@@ -76,6 +76,7 @@ const allWaiverAdds = [];   // {season, managerId, playerId, faab, week} for FAA
 const txByManager = {};     // managerId -> {faabSpent, waiverClaims, faAdds, biggestBid, trades}
 const allTrades = [];       // {season, week, created, sides:[{managerId, players, picks, faab, ...Out}]}
 const faEvents = [];        // {managerId, playerId, season, week} free-agent adds, for acquisition source
+const recentMoves = {};     // managerId -> [{type, created, week, in[], out[], ...}] for current season
 const currentRosters = {};  // managerId -> [playerId] for the latest season
 
 const pairKey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
@@ -282,6 +283,8 @@ for (const season of SEASONS) {
 
   const txAll = Object.values(transactions).flat();
   let tradeCount = 0;
+  const isLatest = season === SEASONS[SEASONS.length - 1];
+  const pInfo = (pid) => ({ name: PV[pid]?.name || players[pid]?.name || String(pid), pos: PV[pid]?.position || players[pid]?.pos || null });
   const initTx = (mid) => (txByManager[mid] ||= { faabSpent: 0, waiverClaims: 0, faAdds: 0, biggestBid: 0, trades: 0 });
   for (const tx of txAll) {
     if (tx.type === "trade") {
@@ -303,6 +306,17 @@ for (const season of SEASONS) {
         return { rosterId: rid, managerId: mid, players: playersIn, picks: picksIn, faab: faabIn, playersOut, picksOut, faabOut };
       });
       allTrades.push({ season, week: tx.leg, created: tx.created || tx.status_updated || 0, sides });
+      if (isLatest) for (const side of sides) {
+        if (!side.managerId) continue;
+        const partner = sides.find((s) => s.rosterId !== side.rosterId);
+        (recentMoves[side.managerId] ||= []).push({
+          type: "trade", created: tx.created || tx.status_updated || 0, week: tx.leg,
+          partnerId: partner?.managerId || null,
+          in: side.players.map(pInfo), out: side.playersOut.map(pInfo),
+          picksIn: side.picks.map((p) => `${p.season} R${p.round}`),
+          picksOut: side.picksOut.map((p) => `${p.season} R${p.round}`),
+        });
+      }
       continue;
     }
     const mid = rosterToManager[(tx.roster_ids || [])[0]];
@@ -318,6 +332,13 @@ for (const season of SEASONS) {
     } else if (tx.type === "free_agent") {
       e.faAdds++;
       for (const pid of Object.keys(tx.adds || {})) { referencedPlayers.add(pid); faEvents.push({ managerId: mid, playerId: pid, season, week: tx.leg }); }
+    }
+    if (isLatest && (tx.type === "free_agent" || tx.status === "complete")) {
+      (recentMoves[mid] ||= []).push({
+        type: tx.type, created: tx.created || 0, week: tx.leg,
+        bid: tx.type === "waiver" ? (tx.settings?.waiver_bid ?? null) : null,
+        in: Object.keys(tx.adds || {}).map(pInfo), out: Object.keys(tx.drops || {}).map(pInfo),
+      });
     }
   }
 
@@ -601,6 +622,32 @@ for (const s of SEASONS.filter((x) => seasonsOut[x].isComplete)) {
   };
 }
 
+// ---- recent moves: newest first, capped at 8 per manager ----
+for (const mid in recentMoves) { recentMoves[mid].sort((a, b) => b.created - a.created); recentMoves[mid] = recentMoves[mid].slice(0, 8); }
+
+// ---- draft-pick value tiers (for the Trade Machine) ----
+const ordRd = (r) => ["", "1st", "2nd", "3rd", "4th", "5th"][r] || `R${r}`;
+const pickRounds = {};
+for (const v of Object.values(PV)) {
+  if (v.position !== "PICK") continue;
+  const mm = (v.name || "").match(/(\d{4}) Pick (\d+)\.(\d+)/);
+  if (mm) (pickRounds[mm[2]] ||= []).push(v.value);
+}
+const tierAvg = (arr, a, b) => { const s = arr.slice(a, b); return s.length ? Math.round(s.reduce((x, y) => x + y, 0) / s.length) : 0; };
+const pickTiers = [];
+for (const rd of [1, 2, 3, 4]) {
+  const vs = (pickRounds[rd] || []).slice().sort((a, b) => b - a);
+  if (!vs.length) continue;
+  const early = tierAvg(vs, 0, 4), mid = tierAvg(vs, 4, 8), late = tierAvg(vs, 8, 12) || tierAvg(vs, Math.floor(vs.length / 2), vs.length);
+  if (early) pickTiers.push({ label: `2026 Early ${ordRd(rd)}`, value: early });
+  if (mid) pickTiers.push({ label: `2026 Mid ${ordRd(rd)}`, value: mid });
+  if (late) pickTiers.push({ label: `2026 Late ${ordRd(rd)}`, value: late });
+}
+for (const [yr, disc] of [["2027", 0.9], ["2028", 0.8]]) for (const rd of [1, 2, 3]) {
+  const mid = pickTiers.find((t) => t.label === `2026 Mid ${ordRd(rd)}`);
+  if (mid) pickTiers.push({ label: `${yr} ${ordRd(rd)} (est)`, value: Math.round(mid.value * disc) });
+}
+
 const league = {
   meta: {
     name: manifest.fetchedSeasons[0].name,
@@ -620,6 +667,7 @@ const league = {
   seasons: seasonsOut,
   allTime: { standings: managerList.filter((m) => m.allTime.seasons > 0).sort((a, b) => b.allTime.titles - a.allTime.titles || b.allTime.winPct - a.allTime.winPct || b.allTime.pf - a.allTime.pf) },
   headToHead: h2hList, records, vpRecords, faabRecords, auctionRecords, trades, tradeAnalytics, acquisition, dynasty, awards, draft: draftAnalysis, topPlayerSeasons,
+  recentMoves, pickTiers,
 };
 
 writeFileSync(join(OUT, "league.json"), JSON.stringify(league));
