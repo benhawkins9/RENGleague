@@ -5,15 +5,20 @@ import RankBars from "../components/RankBars.astro";
 import ManagerChip from "../components/ManagerChip.astro";
 import {
   meta, seasons, completedSeasons, allTimeStandings, records,
-  managers, getManager, managerColor, managerName, fmt, pct, record,
+  managers, getManager, managerColor, managerName, avatarUrl, championPhotos, fmt, pct, record,
 } from "../lib/data.js";
 
 // champions per completed season (newest first)
 const champs = [...completedSeasons].reverse().map((s) => ({
   season: s,
   champ: seasons[s].champion,
+  runnerUp: seasons[s].runnerUp,
   pointsKing: seasons[s].pointsKing,
+  photo: championPhotos[s] || null,
 }));
+const reigning = champs[0];
+const pastChamps = champs.slice(1);
+const seasonVP = (season, mid) => seasons[season].standings.find((r) => r.managerId === mid)?.vp ?? "—";
 
 // hero facts
 const totalGames = allTimeStandings.reduce((a, m) => a + m.allTime.w + m.allTime.l + m.allTime.t, 0);
@@ -86,24 +91,57 @@ const sections = [
   <!-- CHAMPIONS -->
   <section class="section-sm">
     <div class="wrap">
-      <div class="eyebrow">Banner row</div>
+      <div class="eyebrow">The throne</div>
       <h2 class="section-title" style="font-size:clamp(22px,3vw,30px);margin-bottom:18px">Reigning & Past Champions</h2>
-      <div class="grid cols-3">
-        {champs.map(({ season, champ, pointsKing }, i) => (
-          <div class={`champ-card${i === 0 ? " is-current" : ""}`}>
-            <div class="cc-top">
-              <span class="cc-season num">{season}</span>
-              {i === 0 && <span class="chip gold" style="font-size:11px">Most recent</span>}
-            </div>
-            <div class="cc-trophy">🏆</div>
-            <ManagerChip id={champ.managerId} name={champ.teamName} size={38} sub={`#${champ.seed} seed · ${fmt(champ.total)} finals pts`} />
-            <div class="cc-foot dim">
-              VP #1 seed: <strong style="color:var(--text)">{managerName(seasons[season].standings[0].managerId)}</strong> · {seasons[season].standings[0].vp} VP
-            </div>
+
+      <!-- reigning champion spotlight -->
+      <div class="champ-spotlight">
+        <div class="cs-photo">
+          {reigning.photo
+            ? <img src={reigning.photo} alt={`${reigning.champ.teamName}, ${reigning.season} champion`} />
+            : <div class="cs-noimg">🏆</div>}
+          <span class="cs-yearbadge">🏆 {reigning.season} Champion</span>
+        </div>
+        <div class="cs-body">
+          <span class="cs-crown">👑 Reigning Champion</span>
+          <h3 class="cs-team">{reigning.champ.teamName}</h3>
+          <a class="cs-mgr" href={`/managers/${reigning.champ.managerId}`}>
+            {avatarUrl(getManager(reigning.champ.managerId)?.avatar) && <img src={avatarUrl(getManager(reigning.champ.managerId)?.avatar)} alt="" />}
+            <span>@{getManager(reigning.champ.managerId)?.displayName}</span>
+          </a>
+          <div class="cs-deets">
+            <div><span class="num">{fmt(reigning.champ.total)}</span><label>Finals points</label></div>
+            <div><span class="num">#{reigning.champ.seed}</span><label>Playoff seed</label></div>
+            <div><span class="num">{seasonVP(reigning.season, reigning.champ.managerId)}</span><label>Season VP</label></div>
           </div>
-        ))}
+          {reigning.runnerUp && (
+            <p class="cs-story">Outlasted <strong>{reigning.runnerUp.teamName}</strong> in the two-week final to seize the {reigning.season} crown{reigning.champ.seed >= 4 ? ` — a #${reigning.champ.seed}-seed Cinderella run that nobody saw coming.` : "."}</p>
+          )}
+          <a href="/hall" class="cs-link">Full championship history →</a>
+        </div>
       </div>
-      <p class="dim" style="font-size:12.5px;margin-top:12px">{meta.note}</p>
+
+      <!-- past champions -->
+      {pastChamps.length > 0 && (
+        <>
+          <h4 class="past-head">Before them</h4>
+          <div class="grid cols-2">
+            {pastChamps.map(({ season, champ }) => (
+              <div class="champ-card">
+                <div class="cc-top">
+                  <span class="cc-season num">🏆 {season}</span>
+                  <span class="chip gold" style="font-size:11px">Champion</span>
+                </div>
+                <ManagerChip id={champ.managerId} name={champ.teamName} size={38} sub={`#${champ.seed} seed · ${fmt(champ.total)} finals pts`} />
+                <div class="cc-foot dim">
+                  Beat <strong style="color:var(--text)">{seasons[season].runnerUp?.teamName || "the field"}</strong> in the final
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      <p class="dim" style="font-size:12.5px;margin-top:14px">{meta.note}</p>
     </div>
   </section>
 
@@ -181,15 +219,46 @@ const sections = [
     .hero-stats .num { font-size: clamp(28px, 4vw, 40px); font-weight: 700; line-height: 1; }
     .hero-stats label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-top: 6px; }
 
+    /* reigning champion spotlight */
+    .champ-spotlight {
+      display: grid; grid-template-columns: minmax(0, 330px) 1fr; gap: 0; margin-bottom: 24px;
+      border: 1px solid rgba(255,207,74,.4); border-radius: var(--radius-lg); overflow: hidden;
+      background: linear-gradient(120deg, rgba(255,207,74,.12), var(--panel) 52%, var(--bg-2));
+      box-shadow: 0 0 0 1px rgba(255,207,74,.12), var(--shadow-lg); position: relative;
+    }
+    .champ-spotlight::after {
+      content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 2;
+      background: linear-gradient(115deg, transparent 42%, rgba(255,255,255,.06) 49%, transparent 56%);
+      background-size: 250% 100%; animation: shine 6.5s ease-in-out infinite;
+    }
+    @keyframes shine { 0%, 100% { background-position: 130% 0; } 50% { background-position: -30% 0; } }
+    .cs-photo { position: relative; min-height: 380px; background: var(--bg); }
+    .cs-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 40%; display: block; }
+    .cs-noimg { display: grid; place-items: center; height: 100%; font-size: 64px; }
+    .cs-yearbadge { position: absolute; top: 12px; left: 12px; z-index: 3; background: rgba(8,11,20,.82); color: var(--gold); font-family: var(--display); font-weight: 800; font-size: 13px; padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(255,207,74,.4); backdrop-filter: blur(4px); }
+    .cs-body { padding: 26px 28px; display: flex; flex-direction: column; justify-content: center; gap: 11px; position: relative; z-index: 1; }
+    .cs-crown { font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--gold); }
+    .cs-team { font-family: var(--display); font-size: clamp(24px, 3.4vw, 34px); line-height: 1.05; margin: 0; }
+    .cs-mgr { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); width: fit-content; }
+    .cs-mgr img { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; }
+    .cs-mgr:hover { color: var(--text); }
+    .cs-deets { display: grid; grid-template-columns: repeat(3, auto); gap: 24px; padding: 13px 0; margin: 3px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); width: fit-content; }
+    .cs-deets .num { font-size: 24px; font-weight: 800; font-family: var(--display); color: var(--gold); display: block; line-height: 1; }
+    .cs-deets label { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-top: 5px; display: block; }
+    .cs-story { font-size: 14px; line-height: 1.55; color: var(--text-2); margin: 0; }
+    .cs-story strong { color: var(--gold); }
+    .cs-link { font-size: 13px; color: var(--gold); font-weight: 700; width: fit-content; }
+    .cs-link:hover { text-decoration: underline; }
+    @media (max-width: 760px) { .champ-spotlight { grid-template-columns: 1fr; } .cs-photo { min-height: 0; aspect-ratio: 4 / 5; } }
+
+    .past-head { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; font-weight: 700; }
     .champ-card {
       background: linear-gradient(180deg, var(--panel), var(--bg-2));
       border: 1px solid var(--line); border-radius: var(--radius); padding: 18px;
       display: flex; flex-direction: column; gap: 12px;
     }
-    .champ-card.is-current { border-color: rgba(255,207,74,.35); box-shadow: 0 0 0 1px rgba(255,207,74,.15), var(--shadow); }
     .cc-top { display: flex; align-items: center; justify-content: space-between; }
-    .cc-season { font-size: 22px; font-weight: 700; color: var(--muted); }
-    .cc-trophy { font-size: 30px; filter: drop-shadow(0 4px 8px rgba(255,207,74,.3)); }
+    .cc-season { font-size: 18px; font-weight: 700; color: var(--gold); font-family: var(--display); }
     .cc-foot { font-size: 12px; border-top: 1px solid var(--line); padding-top: 11px; }
 
     .navcards .navcard {

@@ -65,6 +65,11 @@ export const managerExtras = {
 };
 export const getManagerExtras = (id) => managerExtras[id] || null;
 
+// ---- champion celebration photos (season -> /public path). Drop more as you get them. ----
+export const championPhotos = {
+  "2025": "/champions/2025.jpg", // For a Few Injuries More
+};
+
 export const player = (id) => players[id] || { id, name: id, pos: null, team: null };
 
 // ---- stable per-manager color (for charts / bump lines / accents) ----
