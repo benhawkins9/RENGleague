@@ -1,0 +1,11 @@
+# Regular Everday Normal Guys — a private fantasy league site.
+# Not for search engines or scrapers. Please don't index or crawl this.
+
+# Claude (builds & fetches this site for the league owner) is welcome.
+User-agent: Claude-User
+User-agent: Claude-SearchBot
+Allow: /
+
+# Everyone else — every search engine and bot — stay out.
+User-agent: *
+Disallow: /
