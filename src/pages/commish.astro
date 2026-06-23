@@ -2,7 +2,7 @@
 import Base from "../layouts/Base.astro";
 import PageHeader from "../components/PageHeader.astro";
 import ManagerChip from "../components/ManagerChip.astro";
-import { managers, dynasty, chatStats, getManager, managerColor, avatarUrl, fmt, pct, record, ordinal } from "../lib/data.js";
+import { dynasty, chatStats, getManager, managerColor, avatarUrl, fmt, record } from "../lib/data.js";
 
 // The two co-commissioners
 const IDS = { bm: "470083698897711104", og: "470070299694460928" };
@@ -18,16 +18,12 @@ const og = build(IDS.og, "The Quiet Assassin",
   "Lets the trophy do the talking. 2024 champion, a 62% win rate, and a grand total of 56 messages all-time — runs the auction, sets the schedule, and quietly collects everyone's dues while saying almost nothing. The competence to Big Monkey's chaos. Anchored by Jaxon Smith-Njigba.");
 const commish = [bm, og];
 
-// Tale of the Tape — higher metricN = "leads" (dynasty rank negated so lower rank leads)
-const tape = [
-  { label: "All-time record", bm: record(bm.a.w, bm.a.l), og: record(og.a.w, og.a.l), bmN: bm.a.winPct, ogN: og.a.winPct },
-  { label: "Win %", bm: pct(bm.a.winPct), og: pct(og.a.winPct), bmN: bm.a.winPct, ogN: og.a.winPct },
-  { label: "Championships", bm: `${bm.a.titles} 🏆`, og: `${og.a.titles} 🏆`, bmN: bm.a.titles, ogN: og.a.titles },
-  { label: "Best finish", bm: ordinal(bm.a.bestSeed) + " seed", og: ordinal(og.a.bestSeed) + " seed", bmN: -bm.a.bestSeed, ogN: -og.a.bestSeed },
-  { label: "Career trades", bm: bm.a.trades, og: og.a.trades, bmN: bm.a.trades, ogN: og.a.trades },
-  { label: "FAAB spent (all-time)", bm: "$" + fmt(bm.a.faabSpent), og: "$" + fmt(og.a.faabSpent), bmN: bm.a.faabSpent, ogN: og.a.faabSpent },
-  { label: "Chat messages", bm: fmt(bm.msgs), og: fmt(og.msgs), bmN: bm.msgs, ogN: og.msgs },
-  { label: "Dynasty power rank", bm: "#" + bm.d.rank, og: "#" + og.d.rank, bmN: -bm.d.rank, ogN: -og.d.rank },
+// Better Together — the duo's combined output (a celebration, not a contest)
+const combined = [
+  { icon: "🗓️", n: Math.max(bm.a.seasons, og.a.seasons), label: "Seasons at the helm" },
+  { icon: "🏆", n: bm.a.titles + og.a.titles, label: "Titles between them" },
+  { icon: "🤝", n: bm.a.trades + og.a.trades, label: "Trades brokered" },
+  { icon: "💬", n: fmt(bm.msgs + og.msgs), label: "Messages sent" },
 ];
 
 const duties = [
@@ -47,6 +43,7 @@ const duties = [
     <div class="wrap">
       <!-- hero photo -->
       <figure class="photo">
+        <div class="photo-bg" style="background-image:url(/commish.jpg)"></div>
         <img src="/commish.jpg" alt="The co-commissioners mid-water-slide, throwing peace signs"
           onerror="this.closest('.photo').classList.add('no-img')" />
         <div class="ph-fallback">
@@ -79,22 +76,15 @@ const duties = [
         ))}
       </div>
 
-      <!-- tale of the tape -->
-      <div class="panel panel-pad tape">
-        <h3 style="font-size:16px;margin-bottom:4px">⚖️ Tale of the Tape</h3>
-        <p class="dim" style="font-size:12px;margin:0 0 16px">Chaos vs. competence, by the numbers. The leader of each row is highlighted.</p>
-        <div class="tape-head">
-          <span style={`color:${bm.color}`}>{bm.m.name}</span>
-          <span class="dim">vs</span>
-          <span style={`color:${og.color}`}>{og.m.name}</span>
+      <!-- better together -->
+      <div class="panel panel-pad together" style={`--bm:${bm.color};--og:${og.color}`}>
+        <h3 style="font-size:16px;margin-bottom:4px">🤝 Better Together</h3>
+        <p class="dim" style="font-size:12.5px;margin:0 0 4px">Chaos and competence, pulling the same rope. What the two of them have built since 2023:</p>
+        <div class="tog-stats">
+          {combined.map((c) => (
+            <div class="tog"><span class="tog-i">{c.icon}</span><span class="tog-n">{c.n}</span><label>{c.label}</label></div>
+          ))}
         </div>
-        {tape.map((r) => (
-          <div class="tape-row">
-            <span class={`tv left${r.bmN > r.ogN ? " win" : ""}`} style={`--c:${bm.color}`}>{r.bm}</span>
-            <span class="tl">{r.label}</span>
-            <span class={`tv right${r.ogN > r.bmN ? " win" : ""}`} style={`--c:${og.color}`}>{r.og}</span>
-          </div>
-        ))}
       </div>
 
       <!-- duties -->
@@ -117,9 +107,10 @@ const duties = [
   </section>
 
   <style>
-    .photo { margin: 0 0 26px; border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; background: var(--panel); position: relative; }
-    .photo img { display: block; width: 100%; max-height: 560px; object-fit: cover; object-position: center 38%; }
-    .photo.no-img img { display: none; }
+    .photo { margin: 0 0 26px; border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; background: var(--bg-2); position: relative; }
+    .photo-bg { position: absolute; inset: 0; background-size: cover; background-position: center; filter: blur(34px) brightness(.42) saturate(1.25); transform: scale(1.25); }
+    .photo img { position: relative; display: block; margin: 0 auto; max-width: 100%; max-height: 560px; }
+    .photo.no-img img, .photo.no-img .photo-bg { display: none; }
     .ph-fallback { display: none; padding: 60px 24px; text-align: center; }
     .photo.no-img .ph-fallback { display: block; }
     .ph-fallback p { color: var(--muted); margin: 10px 0 0; font-size: 14px; }
@@ -138,16 +129,14 @@ const duties = [
     .cm-stats > div { text-align: center; }
     .cm-stats .num { display: block; font-size: 19px; font-weight: 700; font-family: var(--display); color: var(--c); }
     .cm-stats label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
-    .tape { margin-bottom: 8px; }
-    .tape-head { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; font-family: var(--display); font-weight: 700; font-size: 15px; padding-bottom: 10px; margin-bottom: 6px; border-bottom: 1px solid var(--line); }
-    .tape-head span:first-child { text-align: right; }
-    .tape-row { display: grid; grid-template-columns: 1fr 1.1fr 1fr; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
-    .tape-row:last-child { border-bottom: none; }
-    .tl { text-align: center; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-    .tv { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 15px; color: var(--text-2); padding: 4px 10px; border-radius: 8px; }
-    .tv.left { text-align: right; }
-    .tv.right { text-align: left; }
-    .tv.win { color: var(--c); background: color-mix(in srgb, var(--c) 13%, transparent); font-weight: 800; }
+    .together { position: relative; overflow: hidden; margin-bottom: 8px; }
+    .together::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: linear-gradient(90deg, var(--bm), var(--og)); }
+    .tog-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px; }
+    .tog { text-align: center; background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 10px; }
+    .tog-i { font-size: 20px; display: block; margin-bottom: 4px; }
+    .tog-n { display: block; font-family: var(--display); font-size: 30px; font-weight: 800; line-height: 1; background: linear-gradient(90deg, var(--bm), var(--og)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .tog label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-top: 6px; display: block; }
+    @media (max-width: 560px) { .tog-stats { grid-template-columns: repeat(2, 1fr); } }
     .duties { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 26px; }
     .duty { display: flex; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 15px 16px; }
     .duty-i { font-size: 22px; flex-shrink: 0; }
