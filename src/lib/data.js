@@ -57,6 +57,13 @@ export const managerAvatar = (id) => byId[id]?.avatar || null;
 export const commissionerIds = ["470083698897711104", "470070299694460928"];
 export const isCommissioner = (id) => commissionerIds.includes(id);
 
+// ---- manual per-manager extras: trade status + contact (not from Sleeper) ----
+// Add an entry keyed by managerId to show a status chip + a "text me" button.
+export const managerExtras = {
+  "470070299694460928": { status: "Open for deals", phone: "281-723-0003" }, // OceanGate Titans
+};
+export const getManagerExtras = (id) => managerExtras[id] || null;
+
 export const player = (id) => players[id] || { id, name: id, pos: null, team: null };
 
 // ---- stable per-manager color (for charts / bump lines / accents) ----

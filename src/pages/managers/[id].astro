@@ -4,7 +4,7 @@ import StatCard from "../../components/StatCard.astro";
 import ManagerChip from "../../components/ManagerChip.astro";
 import {
   meta, managers, seasons, completedSeasons, headToHead, draft, acquisition, dynasty, recentMoves,
-  getManager, managerName, managerColor, avatarUrl, isCommissioner, fmt, pct, signed, record, ordinal,
+  getManager, managerName, managerColor, avatarUrl, isCommissioner, getManagerExtras, fmt, pct, signed, record, ordinal,
 } from "../../lib/data.js";
 
 export function getStaticPaths() {
@@ -63,6 +63,8 @@ const acqSources = [
 ];
 const dyn = dynasty?.teams.find((t) => t.managerId === id);
 const fmtV = (v) => (v / 1000).toFixed(1) + "k";
+const extras = getManagerExtras(id);
+const phoneHref = extras?.phone ? "sms:+1" + extras.phone.replace(/\D/g, "") : null;
 
 // current roster grouped by position (value-sorted)
 const roster = dyn?.players || [];
@@ -97,6 +99,7 @@ const resultFor = (season, seed) => {
         <h1 class="mgr-name">{m.name}</h1>
         <p class="dim" style="margin:4px 0 0">@{m.displayName} · {a.seasons} seasons played</p>
         <div class="row wrap-gap" style="margin-top:14px;gap:7px">
+          {extras?.status && <span class="chip deals"><span class="deals-dot"></span>{extras.status}</span>}
           {isCommissioner(id) && <a href="/commish" class="chip purple">🏛️ Co-Commissioner</a>}
           {a.titles > 0 && <span class="chip gold">🏆 {a.titles}× Champion</span>}
           {a.runnerUps > 0 && <span class="chip blue">🥈 {a.runnerUps}× Runner-up</span>}
@@ -106,6 +109,7 @@ const resultFor = (season, seed) => {
         </div>
         <div class="hero-actions">
           <a class="act act-trade" href={`/trades#tm=${id}`}>⚖️ Propose a Trade</a>
+          {phoneHref && <a class="act act-phone" href={phoneHref} title="Text me a trade offer">📱 {extras.phone}</a>}
           <a class="act act-dm" href={`https://sleeper.com/messages/${id}`} target="_blank" rel="noopener">💬 Message on Sleeper</a>
         </div>
       </div>
@@ -344,6 +348,11 @@ const resultFor = (season, seed) => {
     .act-trade:hover { filter: brightness(1.1); }
     .act-dm { background: var(--panel-2); border: 1px solid var(--line-2); color: var(--text); }
     .act-dm:hover { border-color: var(--c); }
+    .act-phone { background: var(--gold-soft); color: var(--gold); border: 1px solid rgba(255,207,74,.3); }
+    .act-phone:hover { border-color: var(--gold); }
+    .chip.deals { background: var(--accent-soft); color: var(--accent); border-color: rgba(46,230,166,.3); }
+    .deals-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: dealspulse 1.8s ease-out infinite; }
+    @keyframes dealspulse { 0% { box-shadow: 0 0 0 0 rgba(46,230,166,.55); } 70% { box-shadow: 0 0 0 7px rgba(46,230,166,0); } 100% { box-shadow: 0 0 0 0 rgba(46,230,166,0); } }
     .roster-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px 18px; }
     .pos-col { min-width: 0; }
     .pos-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 6px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
