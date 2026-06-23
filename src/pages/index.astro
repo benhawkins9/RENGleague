@@ -18,7 +18,6 @@ const champs = [...completedSeasons].reverse().map((s) => ({
 }));
 const reigning = champs[0];
 const pastChamps = champs.slice(1);
-const seasonVP = (season, mid) => seasons[season].standings.find((r) => r.managerId === mid)?.vp ?? "—";
 
 // hero facts
 const totalGames = allTimeStandings.reduce((a, m) => a + m.allTime.w + m.allTime.l + m.allTime.t, 0);
@@ -109,13 +108,29 @@ const sections = [
             {avatarUrl(getManager(reigning.champ.managerId)?.avatar) && <img src={avatarUrl(getManager(reigning.champ.managerId)?.avatar)} alt="" />}
             <span>@{getManager(reigning.champ.managerId)?.displayName}</span>
           </a>
-          <div class="cs-deets">
-            <div><span class="num">{fmt(reigning.champ.total)}</span><label>Finals points</label></div>
-            <div><span class="num">#{reigning.champ.seed}</span><label>Playoff seed</label></div>
-            <div><span class="num">{seasonVP(reigning.season, reigning.champ.managerId)}</span><label>Season VP</label></div>
-          </div>
           {reigning.runnerUp && (
-            <p class="cs-story">Outlasted <strong>{reigning.runnerUp.teamName}</strong> in the two-week final to seize the {reigning.season} crown{reigning.champ.seed >= 4 ? ` — a #${reigning.champ.seed}-seed Cinderella run that nobody saw coming.` : "."}</p>
+            <div class="cs-box">
+              <div class="cs-box-row cs-box-head"><span>2-week final</span><span>Wk 16</span><span>Wk 17</span><span>Total</span></div>
+              <div class="cs-box-row cs-win">
+                <span class="cs-bt">🏆 {reigning.champ.teamName}</span>
+                <span>{fmt(reigning.champ.wk[16], 1)}</span><span>{fmt(reigning.champ.wk[17], 1)}</span><span class="cs-tot">{fmt(reigning.champ.total, 1)}</span>
+              </div>
+              <div class="cs-box-row">
+                <span class="cs-bt">{reigning.runnerUp.teamName}</span>
+                <span>{fmt(reigning.runnerUp.wk[16], 1)}</span><span>{fmt(reigning.runnerUp.wk[17], 1)}</span><span class="cs-tot">{fmt(reigning.runnerUp.total, 1)}</span>
+              </div>
+            </div>
+          )}
+          {reigning.champ.mvp && (
+            <div class="cs-mvp">
+              <span class="cs-mvp-badge">🏅 Finals MVP</span>
+              <strong>{reigning.champ.mvp.name}</strong>
+              {reigning.champ.mvp.pos && <span class={`tag-pos pos-${reigning.champ.mvp.pos}`}>{reigning.champ.mvp.pos}</span>}
+              <span class="cs-mvp-pts">{fmt(reigning.champ.mvp.points, 1)} pts</span>
+            </div>
+          )}
+          {reigning.runnerUp && (
+            <p class="cs-story">A <strong>#{reigning.champ.seed}-seed</strong> Cinderella run — the lowest seed to ever take the crown.</p>
           )}
           <a href="/hall" class="cs-link">Full championship history →</a>
         </div>
@@ -242,9 +257,20 @@ const sections = [
     .cs-mgr { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); width: fit-content; }
     .cs-mgr img { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; }
     .cs-mgr:hover { color: var(--text); }
-    .cs-deets { display: grid; grid-template-columns: repeat(3, auto); gap: 24px; padding: 13px 0; margin: 3px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); width: fit-content; }
-    .cs-deets .num { font-size: 24px; font-weight: 800; font-family: var(--display); color: var(--gold); display: block; line-height: 1; }
-    .cs-deets label { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-top: 5px; display: block; }
+    .cs-box { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; font-variant-numeric: tabular-nums; margin: 2px 0; }
+    .cs-box-row { display: grid; grid-template-columns: 1fr 50px 50px 56px; align-items: center; gap: 4px; padding: 7px 11px; font-size: 13px; }
+    .cs-box-row + .cs-box-row { border-top: 1px solid var(--line); }
+    .cs-box-head { background: var(--bg-2); font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+    .cs-box-row span:not(.cs-bt) { text-align: right; }
+    .cs-win { background: var(--gold-soft); }
+    .cs-bt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+    .cs-win .cs-bt { color: var(--gold); }
+    .cs-tot { font-weight: 800; }
+    .cs-win .cs-tot { color: var(--gold); }
+    .cs-mvp { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13.5px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; }
+    .cs-mvp-badge { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--gold); white-space: nowrap; }
+    .cs-mvp strong { font-size: 14px; }
+    .cs-mvp-pts { margin-left: auto; font-weight: 800; color: var(--gold); font-variant-numeric: tabular-nums; white-space: nowrap; }
     .cs-story { font-size: 14px; line-height: 1.55; color: var(--text-2); margin: 0; }
     .cs-story strong { color: var(--gold); }
     .cs-link { font-size: 13px; color: var(--gold); font-weight: 700; width: fit-content; }

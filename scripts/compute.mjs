@@ -295,6 +295,30 @@ for (const season of SEASONS) {
       playInWeek: PLAYIN_WEEK, finalsWeeks: FINALS_WEEKS,
     };
     champion = finals[0]; runnerUp = finals[1];
+
+    // ---- Finals MVP: champion's top-scoring starter across the finals weeks ----
+    if (champion) {
+      const champRoster = Object.keys(rosterToManager).find((rid) => rosterToManager[rid] === champion.managerId);
+      if (champRoster != null) {
+        const tally = {};
+        for (const w of FINALS_WEEKS) {
+          const entry = (matchups[w] || []).find((t) => String(t.roster_id) === String(champRoster));
+          if (!entry) continue;
+          (entry.starters || []).forEach((pid, i) => {
+            if (!pid || pid === "0") return;
+            const pts = (entry.starters_points || [])[i] || 0;
+            (tally[pid] ||= { points: 0, wk: {} });
+            tally[pid].points += pts;
+            tally[pid].wk[w] = round(pts);
+          });
+        }
+        const top = Object.entries(tally).sort((a, b) => b[1].points - a[1].points)[0];
+        if (top) {
+          referencedPlayers.add(top[0]);
+          champion.mvp = { playerId: top[0], name: players[top[0]]?.name || top[0], pos: players[top[0]]?.pos || null, team: players[top[0]]?.team || null, points: round(top[1].points), wk: top[1].wk };
+        }
+      }
+    }
   }
 
   const pointsKing = [...teamRows].sort((a, b) => b.pf - a.pf)[0];
