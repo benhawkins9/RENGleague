@@ -3,7 +3,7 @@ import Base from "../../layouts/Base.astro";
 import StatCard from "../../components/StatCard.astro";
 import ManagerChip from "../../components/ManagerChip.astro";
 import {
-  meta, managers, seasons, completedSeasons, headToHead, draft, acquisition, dynasty, recentMoves,
+  meta, managers, seasons, completedSeasons, headToHead, draft, acquisition, dynasty, recentMoves, futurePicks,
   getManager, managerName, managerColor, avatarUrl, isCommissioner, getManagerExtras, fmt, pct, signed, record, ordinal,
 } from "../../lib/data.js";
 
@@ -75,6 +75,10 @@ for (const k in byPos) byPos[k].sort((x, y) => y.value - x.value);
 const posGroups = [...POS_ORDER.filter((p) => byPos[p]), ...Object.keys(byPos).filter((p) => !POS_ORDER.includes(p))]
   .map((p) => ({ pos: p, players: byPos[p] }));
 
+// future draft picks (own ± trades)
+const picks = futurePicks[id] || [];
+const picksValue = picks.reduce((a, p) => a + (p.value || 0), 0);
+
 // recent transactions (current season)
 const moves = recentMoves[id] || [];
 const moveLabel = (mv) => mv.type === "trade" ? "⇄ Trade" : mv.type === "waiver" ? `💰 Waiver${mv.bid != null ? " $" + mv.bid : ""}` : "➕ Free agent";
@@ -121,7 +125,7 @@ const resultFor = (season, seed) => {
     <div class="wrap grid cols-2" style="align-items:start">
       <div class="panel panel-pad">
         <div class="row between" style="align-items:baseline;margin-bottom:14px">
-          <h3 style="font-size:16px">📋 Current Roster <span class="dim" style="font-size:13px;font-weight:400">· {roster.length}</span></h3>
+          <h3 style="font-size:16px">📋 Current Roster <span class="dim" style="font-size:13px;font-weight:400">· {roster.length} players{picks.length ? ` · ${picks.length} picks` : ""}</span></h3>
           {dyn && <span class="dim" style="font-size:12.5px">value <b style="color:var(--accent)">{fmtV(dyn.totalValue)}</b> · <a href="/dynasty" style="color:var(--accent-2)">#{dyn.rank}</a></span>}
         </div>
         {roster.length ? (
@@ -140,6 +144,17 @@ const resultFor = (season, seed) => {
                 ))}
               </div>
             ))}
+            {picks.length > 0 && (
+              <div class="pos-col">
+                <div class="pos-head"><span class="tag-pos pos-PICK">PICKS</span><span class="dim num">{fmtV(picksValue)}</span></div>
+                {picks.map((p) => (
+                  <div class="ros-row">
+                    <span class="ros-name" title={p.own ? "Own pick" : `From ${managerName(p.fromManagerId)}`}>{p.season} {ordinal(p.round)}{!p.own && <span class="via" title={`From ${managerName(p.fromManagerId)}`}>↩</span>}</span>
+                    <span class="ros-meta"><span class="num ros-val">{fmtV(p.value)}</span></span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ) : <p class="dim" style="font-size:13px">No current roster on record.</p>}
       </div>
@@ -360,6 +375,8 @@ const resultFor = (season, seed) => {
     .ros-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .ros-meta { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; }
     .ros-val { font-size: 12px; color: var(--muted); font-weight: 600; }
+    .tag-pos.pos-PICK { background: var(--gold-soft); color: var(--gold); }
+    .via { color: var(--accent-2); font-size: 10px; margin-left: 2px; cursor: help; }
     .moves { display: flex; flex-direction: column; gap: 9px; }
     .move { display: flex; gap: 11px; padding: 9px 0; border-bottom: 1px solid var(--line); }
     .move:last-child { border: none; }

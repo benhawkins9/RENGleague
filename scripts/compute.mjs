@@ -78,6 +78,13 @@ const allTrades = [];       // {season, week, created, sides:[{managerId, player
 const faEvents = [];        // {managerId, playerId, season, week} free-agent adds, for acquisition source
 const recentMoves = {};     // managerId -> [{type, created, week, in[], out[], ...}] for current season
 const currentRosters = {};  // managerId -> [playerId] for the latest season
+const futurePicks = {};     // managerId -> [{season, round, own, fromManagerId, value}] future draft picks
+
+// rough value per round from current FantasyCalc pick slots (round median) — used to value future picks
+const slotVals = {};
+for (const v of Object.values(PV)) { if (v.position !== "PICK") continue; const mm = (v.name || "").match(/Pick (\d)\.(\d+)/); if (mm) (slotVals[+mm[1]] ||= []).push(v.value); }
+const midByRound = {};
+for (const rd in slotVals) { const s = slotVals[rd].slice().sort((a, b) => b - a); midByRound[rd] = s[Math.floor(s.length / 2)] || 0; }
 
 const pairKey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 
@@ -88,6 +95,7 @@ for (const season of SEASONS) {
   const matchups = read(season, "matchups.json");
   const drafts = read(season, "drafts.json");
   const draftPicks = read(season, "draft_picks.json");
+  const tradedPicks = read(season, "traded_picks.json") || [];
   const transactions = read(season, "transactions.json");
 
   const userById = Object.fromEntries(users.map((u) => [u.user_id, u]));
@@ -97,7 +105,31 @@ for (const season of SEASONS) {
     touchManager(r.owner_id, userById[r.owner_id], season);
     (r.players || []).forEach((p) => referencedPlayers.add(p));
   }
-  if (season === SEASONS[SEASONS.length - 1]) for (const r of rosters) if (r.owner_id) currentRosters[r.owner_id] = r.players || [];
+  if (season === SEASONS[SEASONS.length - 1]) {
+    for (const r of rosters) if (r.owner_id) currentRosters[r.owner_id] = r.players || [];
+
+    // ---- future draft-pick inventory (own picks ± trades) ----
+    const ROUNDS = league.settings?.draft_rounds || 4;
+    const curDraftDone = drafts.some((d) => String(d.season) === String(season) && d.status === "complete");
+    const nextDraft = curDraftDone ? Number(season) + 1 : Number(season);
+    const tpYears = tradedPicks.map((p) => Number(p.season));
+    const horizon = Math.max(nextDraft + 1, tpYears.length ? Math.max(...tpYears) : nextDraft + 1);
+    const futureSeasons = [];
+    for (let y = nextDraft; y <= horizon; y++) futureSeasons.push(y);
+    const yrDisc = (yr) => (yr === nextDraft ? 0.92 : yr === nextDraft + 1 ? 0.8 : 0.68);
+    const pickVal = (yr, rd) => Math.round((midByRound[rd] || 0) * yrDisc(yr));
+    // default: each roster owns its own pick each round; traded_picks reassign ownership
+    const owner = {}; // `${yr}|${rd}|${origRoster}` -> current owner roster_id
+    for (const r of rosters) for (const yr of futureSeasons) for (let rd = 1; rd <= ROUNDS; rd++) owner[`${yr}|${rd}|${r.roster_id}`] = r.roster_id;
+    for (const tp of tradedPicks) { const yr = Number(tp.season); if (futureSeasons.includes(yr)) owner[`${yr}|${tp.round}|${tp.roster_id}`] = tp.owner_id; }
+    for (const key of Object.keys(owner)) {
+      const [yr, rd, orig] = key.split("|").map(Number);
+      const ownerMid = rosterToManager[owner[key]];
+      if (!ownerMid) continue;
+      (futurePicks[ownerMid] ||= []).push({ season: yr, round: rd, own: owner[key] === orig, fromManagerId: orig === owner[key] ? null : (rosterToManager[orig] || null), value: pickVal(yr, rd) });
+    }
+    for (const mid of Object.keys(futurePicks)) futurePicks[mid].sort((a, b) => a.season - b.season || a.round - b.round);
+  }
 
   const slots = startingSlots(league.roster_positions || []);
   const allWeeks = Object.keys(matchups).map(Number).sort((a, b) => a - b)
@@ -667,7 +699,7 @@ const league = {
   seasons: seasonsOut,
   allTime: { standings: managerList.filter((m) => m.allTime.seasons > 0).sort((a, b) => b.allTime.titles - a.allTime.titles || b.allTime.winPct - a.allTime.winPct || b.allTime.pf - a.allTime.pf) },
   headToHead: h2hList, records, vpRecords, faabRecords, auctionRecords, trades, tradeAnalytics, acquisition, dynasty, awards, draft: draftAnalysis, topPlayerSeasons,
-  recentMoves, pickTiers,
+  recentMoves, pickTiers, futurePicks,
 };
 
 writeFileSync(join(OUT, "league.json"), JSON.stringify(league));

@@ -46,6 +46,7 @@ export const draft = league.draft;
 export const topPlayerSeasons = league.topPlayerSeasons;
 export const recentMoves = league.recentMoves || {};
 export const pickTiers = league.pickTiers || [];
+export const futurePicks = league.futurePicks || {};
 
 const byId = Object.fromEntries(managers.map((m) => [m.id, m]));
 export const getManager = (id) => byId[id] || null;
