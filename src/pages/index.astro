@@ -141,16 +141,31 @@ const sections = [
         <>
           <h4 class="past-head">Before them</h4>
           <div class="grid cols-2">
-            {pastChamps.map(({ season, champ }) => (
+            {pastChamps.map(({ season, champ, runnerUp, photo }) => (
               <div class="champ-card">
+                {photo && (
+                  <div class="pc-photo"><img src={photo} alt={`${champ.teamName}, ${season} champion`} /><span class="pc-year">🏆 {season}</span></div>
+                )}
                 <div class="cc-top">
-                  <span class="cc-season num">🏆 {season}</span>
-                  <span class="chip gold" style="font-size:11px">Champion</span>
+                  <span class="cc-season num">🏆 {season} Champion</span>
+                  <a class="pc-mgr dim" href={`/managers/${champ.managerId}`}>@{getManager(champ.managerId)?.displayName}</a>
                 </div>
-                <ManagerChip id={champ.managerId} name={champ.teamName} size={38} sub={`#${champ.seed} seed · ${fmt(champ.total)} finals pts`} />
-                <div class="cc-foot dim">
-                  Beat <strong style="color:var(--text)">{seasons[season].runnerUp?.teamName || "the field"}</strong> in the final
-                </div>
+                <h4 class="pc-team">{champ.teamName}</h4>
+                {runnerUp && (
+                  <div class="cs-box">
+                    <div class="cs-box-row cs-box-head"><span>2-week final</span><span>Wk 16</span><span>Wk 17</span><span>Total</span></div>
+                    <div class="cs-box-row cs-win"><span class="cs-bt">🏆 {champ.teamName}</span><span>{fmt(champ.wk[16], 1)}</span><span>{fmt(champ.wk[17], 1)}</span><span class="cs-tot">{fmt(champ.total, 1)}</span></div>
+                    <div class="cs-box-row"><span class="cs-bt">{runnerUp.teamName}</span><span>{fmt(runnerUp.wk[16], 1)}</span><span>{fmt(runnerUp.wk[17], 1)}</span><span class="cs-tot">{fmt(runnerUp.total, 1)}</span></div>
+                  </div>
+                )}
+                {champ.mvp && (
+                  <div class="cs-mvp">
+                    <span class="cs-mvp-badge">🏅 Finals MVP</span>
+                    <strong>{champ.mvp.name}</strong>
+                    {champ.mvp.pos && <span class={`tag-pos pos-${champ.mvp.pos}`}>{champ.mvp.pos}</span>}
+                    <span class="cs-mvp-pts">{fmt(champ.mvp.points, 1)} pts</span>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -280,12 +295,17 @@ const sections = [
     .past-head { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; font-weight: 700; }
     .champ-card {
       background: linear-gradient(180deg, var(--panel), var(--bg-2));
-      border: 1px solid var(--line); border-radius: var(--radius); padding: 18px;
-      display: flex; flex-direction: column; gap: 12px;
+      border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; overflow: hidden;
+      display: flex; flex-direction: column; gap: 10px;
     }
-    .cc-top { display: flex; align-items: center; justify-content: space-between; }
-    .cc-season { font-size: 18px; font-weight: 700; color: var(--gold); font-family: var(--display); }
-    .cc-foot { font-size: 12px; border-top: 1px solid var(--line); padding-top: 11px; }
+    .cc-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .cc-season { font-size: 16px; font-weight: 800; color: var(--gold); font-family: var(--display); }
+    .pc-photo { margin: -18px -18px 4px; position: relative; height: 160px; border-bottom: 1px solid var(--line); }
+    .pc-photo img { width: 100%; height: 100%; object-fit: cover; object-position: center 32%; display: block; }
+    .pc-year { position: absolute; top: 10px; left: 10px; background: rgba(8,11,20,.82); color: var(--gold); font-family: var(--display); font-weight: 800; font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(255,207,74,.4); backdrop-filter: blur(4px); }
+    .pc-mgr { font-size: 12.5px; }
+    .pc-mgr:hover { color: var(--text); }
+    .pc-team { font-family: var(--display); font-size: 20px; line-height: 1.1; margin: 0 0 2px; }
 
     .navcards .navcard {
       display: flex; flex-direction: column; gap: 7px; padding: 22px;
