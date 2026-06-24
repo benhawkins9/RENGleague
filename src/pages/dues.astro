@@ -3,8 +3,20 @@ import Base from "../layouts/Base.astro";
 import PageHeader from "../components/PageHeader.astro";
 import QRCode from "qrcode";
 import { dues } from "../dues.config.js";
+import { dynasty, managerName, getManager, avatarUrl } from "../lib/data.js";
 
 const amt = dues.amount;
+
+// ---- dues paid tracker ----
+const paidSet = new Set(dues.paid || []);
+const teams = (dynasty?.teams || [])
+  .map((t) => ({ id: t.managerId, name: managerName(t.managerId), avatar: avatarUrl(getManager(t.managerId)?.avatar), paid: paidSet.has(t.managerId) }))
+  .sort((a, b) => (b.paid - a.paid) || a.name.localeCompare(b.name));
+const paidCount = teams.filter((t) => t.paid).length;
+const pot = amt * teams.length;
+const collected = amt * paidCount;
+const pctPaid = teams.length ? Math.round((paidCount / teams.length) * 100) : 0;
+const usd = (n) => "$" + n.toLocaleString("en-US");
 const qr = (url, dark) => QRCode.toString(url, { type: "svg", margin: 1, color: { dark, light: "#ffffff" } });
 
 const venmoUrl = dues.venmo
@@ -59,6 +71,30 @@ const anyConfigured = methods.some((m) => m.qr);
     </div>
   </section>
 
+  {teams.length > 0 && (
+    <section class="section-sm">
+      <div class="wrap">
+        <div class="panel panel-pad tracker">
+          <div class="trk-top">
+            <h3 style="font-size:16px">📋 Who's Paid · {dues.season}</h3>
+            <span class="trk-sum dim"><b style="color:var(--accent)">{paidCount}</b> of {teams.length} in · <b style="color:var(--text)">{usd(collected)}</b> of {usd(pot)} pot</span>
+          </div>
+          <div class="trk-bar"><span style={`width:${pctPaid}%`}></span></div>
+          <div class="trk-grid">
+            {teams.map((t) => (
+              <a class={`trk${t.paid ? " is-paid" : ""}`} href={`/managers/${t.id}`}>
+                {t.avatar ? <img class="trk-av" src={t.avatar} alt="" /> : <span class="trk-av trk-fb">{t.name.charAt(0)}</span>}
+                <span class="trk-name">{t.name}</span>
+                <span class="trk-status">{t.paid ? "✓ Paid" : "Unpaid"}</span>
+              </a>
+            ))}
+          </div>
+          <p class="dim" style="font-size:11.5px;margin:14px 0 0">Updated by the commish as payments clear. Paid up? It'll show here.</p>
+        </div>
+      </div>
+    </section>
+  )}
+
   <section class="section-sm" style="padding-bottom:40px">
     <div class="wrap">
       <div class="panel panel-pad dues-info">
@@ -93,6 +129,21 @@ const anyConfigured = methods.some((m) => m.qr);
     .pay-btn:hover { transform: translateY(-1px); box-shadow: 0 10px 24px -10px var(--c); }
     .pay-tip { font-size: 11.5px; margin: 0; }
     .pay-todo { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 0; color: var(--muted); font-size: 13.5px; }
+    .trk-top { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+    .trk-sum { font-size: 13px; }
+    .trk-bar { height: 10px; background: var(--panel-3); border-radius: 999px; overflow: hidden; margin: 13px 0 18px; }
+    .trk-bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 999px; transition: width .4s; }
+    .trk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(205px, 1fr)); gap: 8px; }
+    .trk { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-2); transition: border-color .12s; }
+    .trk:hover { border-color: var(--line-2); }
+    .trk.is-paid { border-color: rgba(46,230,166,.3); background: var(--accent-soft); }
+    .trk-av { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: var(--panel-3); }
+    .trk-fb { display: grid; place-items: center; font-weight: 700; font-size: 13px; color: var(--muted); font-family: var(--display); }
+    .trk-name { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+    .trk-status { font-size: 11px; font-weight: 800; flex-shrink: 0; letter-spacing: .02em; }
+    .trk.is-paid .trk-status { color: var(--accent); }
+    .trk:not(.is-paid) { opacity: .72; }
+    .trk:not(.is-paid) .trk-status { color: var(--muted); }
     .dues-info ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 7px; }
     .dues-info li { font-size: 13.5px; color: var(--muted); line-height: 1.5; }
     .dues-info b { color: var(--text); }

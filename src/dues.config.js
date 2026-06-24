@@ -10,4 +10,10 @@ export const dues = {
 
   venmo: "hawkman", //  Venmo username WITHOUT the @
   cashapp: "henbawkins", //  Cash App $cashtag WITHOUT the $
+
+  // managerIds who've paid this season — add an id here as each team pays.
+  paid: [
+    "470070299694460928", // OceanGate Titans  (@OldManHawk)
+    "470303912964911104", // For a Few Injuries More  (@recklesshubbard)
+  ],
 };
