@@ -15,5 +15,6 @@ export const dues = {
   paid: [
     "470070299694460928", // OceanGate Titans  (@OldManHawk)
     "470303912964911104", // For a Few Injuries More  (@recklesshubbard)
+    "945131126778085376", // MewtwoJigglypuff  (Dylan)
   ],
 };
