@@ -13,6 +13,22 @@ const teams = (dynasty?.teams || [])
   .map((t) => ({ id: t.managerId, name: managerName(t.managerId), avatar: avatarUrl(getManager(t.managerId)?.avatar), paid: paidSet.has(t.managerId) }))
   .sort((a, b) => (b.paid - a.paid) || a.name.localeCompare(b.name));
 const paidCount = teams.filter((t) => t.paid).length;
+const paidTeams = teams.filter((t) => t.paid);
+const unpaidTeams = teams.filter((t) => !t.paid);
+
+// ---- wall of shame ----
+const shameLines = [
+  "Has money for parlays. Apparently not for dues.",
+  "Venmo takes 30 seconds. It's been months.",
+  "Sets their lineup daily. Can't find the pay button.",
+  "Trash-talks in the chat. Ghosts the group pot.",
+  "Your dues are aging worse than your roster.",
+  "The pot called. It's still missing your $200.",
+  "Blames the schedule. The schedule paid on time.",
+  "Faster to accept a trade than to pay the buy-in.",
+];
+// stable per-manager line: hash the id so it doesn't reshuffle every build
+const shameFor = (id) => shameLines[[...id].reduce((a, c) => a + c.charCodeAt(0), 0) % shameLines.length];
 const pot = amt * teams.length;
 const collected = amt * paidCount;
 const pctPaid = teams.length ? Math.round((paidCount / teams.length) * 100) : 0;
@@ -81,14 +97,36 @@ const anyConfigured = methods.some((m) => m.qr);
           </div>
           <div class="trk-bar"><span style={`width:${pctPaid}%`}></span></div>
           <div class="trk-grid">
-            {teams.map((t) => (
-              <a class={`trk${t.paid ? " is-paid" : ""}`} href={`/managers/${t.id}`}>
+            {paidTeams.map((t) => (
+              <a class="trk is-paid" href={`/managers/${t.id}`}>
                 {t.avatar ? <img class="trk-av" src={t.avatar} alt="" /> : <span class="trk-av trk-fb">{t.name.charAt(0)}</span>}
                 <span class="trk-name">{t.name}</span>
-                <span class="trk-status">{t.paid ? "✓ Paid" : "Unpaid"}</span>
+                <span class="trk-status">✓ Paid</span>
               </a>
             ))}
           </div>
+
+          {unpaidTeams.length > 0 && (
+            <div class="shame">
+              <div class="shame-head">
+                <h3>💀 Wall of Shame</h3>
+                <span class="shame-sum">{unpaidTeams.length} {unpaidTeams.length === 1 ? "deadbeat" : "deadbeats"} · <b>{usd(amt * unpaidTeams.length)}</b> owed to the pot</span>
+              </div>
+              <div class="shame-grid">
+                {unpaidTeams.map((t) => (
+                  <a class="shame-card" href={`/managers/${t.id}`}>
+                    <span class="shame-stamp">OWES ${amt}</span>
+                    {t.avatar ? <img class="shame-av" src={t.avatar} alt="" /> : <span class="shame-av shame-fb">{t.name.charAt(0)}</span>}
+                    <span class="shame-info">
+                      <span class="shame-name">{t.name}</span>
+                      <span class="shame-line">{shameFor(t.id)}</span>
+                    </span>
+                  </a>
+                ))}
+              </div>
+              <p class="shame-foot">Screenshots of this page are legal in the group chat. Pay up and get off the wall.</p>
+            </div>
+          )}
           <p class="dim" style="font-size:11.5px;margin:14px 0 0">Updated by the commish as payments clear. Paid up? It'll show here.</p>
         </div>
       </div>
@@ -144,6 +182,34 @@ const anyConfigured = methods.some((m) => m.qr);
     .trk.is-paid .trk-status { color: var(--accent); }
     .trk:not(.is-paid) { opacity: .72; }
     .trk:not(.is-paid) .trk-status { color: var(--muted); }
+    .shame { margin-top: 22px; border: 1px dashed rgba(255,77,77,.45); border-radius: 12px; padding: 16px; background: rgba(255,77,77,.05); }
+    .shame-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .shame-head h3 { font-size: 15px; color: #ff6b6b; letter-spacing: .02em; }
+    .shame-sum { font-size: 12.5px; color: var(--muted); }
+    .shame-sum b { color: #ff6b6b; }
+    .shame-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+    .shame-card {
+      position: relative; display: flex; align-items: center; gap: 12px; padding: 12px 14px; overflow: hidden;
+      border: 1px solid rgba(255,77,77,.35); border-radius: 10px; background: var(--bg-2);
+      animation: shame-pulse 2.2s ease-in-out infinite; transition: border-color .12s;
+    }
+    .shame-card:hover { border-color: rgba(255,77,77,.7); }
+    @keyframes shame-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(255,77,77,0); }
+      50% { box-shadow: 0 0 14px 1px rgba(255,77,77,.22); }
+    }
+    .shame-av { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: var(--panel-3); filter: grayscale(1); border: 2px solid rgba(255,77,77,.5); }
+    .shame-fb { display: grid; place-items: center; font-weight: 700; font-size: 16px; color: var(--muted); font-family: var(--display); }
+    .shame-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding-right: 30px; }
+    .shame-name { font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .shame-line { font-size: 11px; color: #ff8f8f; line-height: 1.35; font-style: italic; }
+    .shame-stamp {
+      position: absolute; top: 50%; right: -26px; transform: translateY(-50%) rotate(-90deg);
+      font-family: var(--display); font-weight: 800; font-size: 10px; letter-spacing: .12em;
+      color: #ff4d4d; border: 1.5px solid #ff4d4d; border-radius: 4px; padding: 2px 7px; opacity: .85; white-space: nowrap;
+    }
+    .shame-foot { font-size: 11.5px; color: #ff8f8f; margin: 12px 0 0; font-style: italic; }
+    @media (prefers-reduced-motion: reduce) { .shame-card { animation: none; } }
     .dues-info ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 7px; }
     .dues-info li { font-size: 13.5px; color: var(--muted); line-height: 1.5; }
     .dues-info b { color: var(--text); }
