@@ -16,5 +16,7 @@ export const dues = {
     "470070299694460928", // OceanGate Titans  (@OldManHawk)
     "470303912964911104", // For a Few Injuries More  (@recklesshubbard)
     "945131126778085376", // MewtwoJigglypuff  (Dylan)
+    "418929704997761024", // gwok  (Gary Walker)
+    "459424661491412992", // bwood012  (Brian Wood)
   ],
 };
