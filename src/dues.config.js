@@ -18,5 +18,6 @@ export const dues = {
     "945131126778085376", // MewtwoJigglypuff  (Dylan)
     "418929704997761024", // gwok  (Gary Walker)
     "459424661491412992", // bwood012  (Brian Wood)
+    "470415514527592448", // JMoneyz
   ],
 };
