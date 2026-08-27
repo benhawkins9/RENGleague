@@ -21,5 +21,7 @@ export const dues = {
     "470415514527592448", // JMoneyz
     "458442701419835392", // jstrick46
     "470083698897711104", // Big Monkey  (alleniverson)
+    "860388533259595776", // IgotabigChubba  (StroudBoy4life)
+    "470777609840488448", // The Woodies  (TheWood1)
   ],
 };
