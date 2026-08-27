@@ -20,5 +20,6 @@ export const dues = {
     "459424661491412992", // bwood012  (Brian Wood)
     "470415514527592448", // JMoneyz
     "458442701419835392", // jstrick46
+    "470083698897711104", // Big Monkey  (alleniverson)
   ],
 };
