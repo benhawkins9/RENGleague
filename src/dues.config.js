@@ -24,5 +24,6 @@ export const dues = {
     "860388533259595776", // IgotabigChubba  (StroudBoy4life)
     "470777609840488448", // The Woodies  (TheWood1)
     "435113942847582208", // The QB Depot  (HappiestEndings — John Ross)
+    "471830572235223040", // Kaʻiminoeauloamekaʻikeo  (EdinsonHTX)
   ],
 };
