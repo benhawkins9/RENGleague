@@ -5,6 +5,9 @@ dist/
 data/raw/
 # SENSITIVE — never commit: Sleeper auth token + raw private league chat
 .sleeper-token
+.sleeper-token.bak
+# Rendered chat-post images (regenerable)
+data/chat-posts/
 data/chat/
 *.log
 .DS_Store
