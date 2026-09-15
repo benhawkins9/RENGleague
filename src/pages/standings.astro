@@ -3,7 +3,10 @@ import Base from "../layouts/Base.astro";
 import PageHeader from "../components/PageHeader.astro";
 import StatCard from "../components/StatCard.astro";
 import ManagerChip from "../components/ManagerChip.astro";
-import { seasons, completedSeasons, managerColor, fmt, pct, signed, record } from "../lib/data.js";
+import { meta, seasons, completedSeasons, managerColor, fmt, pct, signed, record } from "../lib/data.js";
+
+const liveSeason = meta.upcomingSeason;
+const liveWeeks = liveSeason ? (seasons[liveSeason]?.weeksPlayed || 0) : 0;
 
 const order = [...completedSeasons].reverse();
 const defaultSeason = order[0];
@@ -28,7 +31,9 @@ function highlights(s) {
   >
     <div class="season-tabs" role="tablist">
       {order.map((s) => (<button class={`stab${s === defaultSeason ? " is-active" : ""}`} data-season={s}>{s}</button>))}
-      <span class="chip" style="margin-left:auto">2026 · preseason — <a href="/draft" style="color:var(--accent)">see the draft →</a></span>
+      {liveSeason && (liveWeeks > 0
+        ? <span class="chip" style="margin-left:auto">{liveSeason} · through Week {liveWeeks} — <a href="/live" style="color:var(--accent)">live VP scoreboard →</a></span>
+        : <span class="chip" style="margin-left:auto">{liveSeason} · preseason — <a href="/draft" style="color:var(--accent)">see the draft →</a></span>)}
     </div>
   </PageHeader>
 
