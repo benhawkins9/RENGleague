@@ -71,9 +71,10 @@ and re-run `npm run data`.
 ## Posting standings to the Sleeper league chat
 
 `npm run post` renders the current VP table to a PNG (`data/chat-posts/standings-wkN.png`,
-headless Chrome) and prints the auto-generated weekly notes as a **dry run**. `npm run post:send`
-uploads the image and posts it + the notes to the league chat as one message (from the account
-that owns `.sleeper-token`). Flags: `--no-image` (text-only table), `--no-notes` (caption only).
+headless Chrome) as a **dry run**. `npm run post:send` uploads the image and posts it to the league
+chat with a one-line caption ("Standings after Week N.") from the account that owns `.sleeper-token`.
+Flags: `--notes` (append auto-generated weekly notes), `--no-caption` (bare image), `--no-image`
+(text-only table fallback).
 Run `npm run data` first. An expired token is refreshed automatically from Sleeper's response header.
 
 ## Deploy to Vercel

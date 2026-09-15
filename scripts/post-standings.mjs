@@ -1,10 +1,11 @@
 // Post the current-season Victory Points standings to the Sleeper league chat
-// as ONE message: a rendered table image (PNG) + a short text summary.
+// as ONE message: a rendered table image (PNG) with a one-line caption (notes optional).
 //
-//   node scripts/post-standings.mjs            # dry run: writes PNG + prints text, posts nothing
-//   node scripts/post-standings.mjs --post     # upload image + post to league chat
-//   node scripts/post-standings.mjs --post --no-image   # text only
-//   node scripts/post-standings.mjs --post --no-notes   # image + one-line caption only
+//   node scripts/post-standings.mjs            # dry run: writes PNG + prints caption, posts nothing
+//   node scripts/post-standings.mjs --post     # DEFAULT: table image + one-line caption ("Standings after Week N")
+//   node scripts/post-standings.mjs --post --notes       # also append the emoji weekly notes
+//   node scripts/post-standings.mjs --post --no-caption  # bare image, no text at all
+//   node scripts/post-standings.mjs --post --no-image    # text-only table (fallback if Chrome is missing)
 //
 // Run `npm run data` first so src/data/league.json has the latest week.
 // Auth: gitignored .sleeper-token (JWT). Sleeper reissues an expired token in the
@@ -17,7 +18,7 @@ import { execFileSync } from "node:child_process";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const args = new Set(process.argv.slice(2));
-const POST = args.has("--post"), IMAGE = !args.has("--no-image"), NOTES = !args.has("--no-notes");
+const POST = args.has("--post"), IMAGE = !args.has("--no-image"), NOTES = args.has("--notes"), CAPTION = !args.has("--no-caption");
 const CHROME = process.env.CHROME_PATH || "C:/Program Files/Google/Chrome/Application/chrome.exe";
 const OUT_DIR = join(ROOT, "data", "chat-posts");
 mkdirSync(OUT_DIR, { recursive: true });
@@ -36,7 +37,8 @@ const thisWeek = (r) => r.weekly.find((w) => w.week === wk);
 
 // ---------- text summary ----------
 function buildText() {
-  const lines = [`📊 Standings after Week ${wk} (VP · record · PF)`];
+  if (!CAPTION && IMAGE && !NOTES) return "";
+  const lines = [`Standings after Week ${wk}.`];
   if (!IMAGE) {
     st.forEach((r) => lines.push(`${r.seed}. ${name(r)} — ${r.vp} VP · ${r.w}-${r.l} · ${f2(r.pf)}`));
     lines.splice(7, 0, "——— playoff line ———");
@@ -70,7 +72,7 @@ function buildText() {
     if (benchPts >= 20) lines.push(`🪑 Left on bench: ${name(bench.r)} ${f2(benchPts)}`);
     lines.push(`🧊 Low score: ${name(low.r)} ${f2(low.w.points)}`);
   }
-  lines.push("", "Full table, all-play & luck: rengleague.com/live");
+  if (NOTES || !IMAGE) lines.push("", "Full table, all-play & luck: rengleague.com/live");
   return lines.join("\n");
 }
 
