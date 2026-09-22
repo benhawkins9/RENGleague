@@ -154,5 +154,23 @@ const rules = [
     .r-ic { font-size: 24px; } .r-t { font-family: var(--display); font-weight: 700; font-size: 15px; } .r-d { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
     .entrant { display: block; padding: 12px 14px; background: linear-gradient(180deg, var(--panel), var(--bg-2)); border: 1px solid var(--line); border-left: 3px solid var(--c); border-radius: var(--radius-sm); transition: transform .12s, border-color .12s; }
     .entrant:hover { transform: translateY(-2px); border-color: var(--c); }
+
+    /* heatmap: keep the team column pinned while the week columns scroll */
+    .heat-team { position: sticky; left: 0; z-index: 1; background: linear-gradient(90deg, var(--panel) 85%, transparent); }
+    .heat th:first-child { position: sticky; left: 0; z-index: 1; background: var(--panel); }
+
+    @media (max-width: 620px) {
+      .tbl { font-size: 13px; }
+      .tbl :global(th), .tbl :global(td) { padding: 9px 7px; }
+      .tbl :global(th:first-child), .tbl :global(td:first-child) { padding-left: 12px; }
+      .tbl :global(th:last-child), .tbl :global(td:last-child) { padding-right: 12px; }
+      .tbl :global(.td-num) { white-space: nowrap; }
+      .tbl :global(td:nth-child(2)) { max-width: 0; width: 100%; } /* team column absorbs leftover width, name ellipsizes */
+      .tbl :global(.mchip) { max-width: 100%; }
+      .lw-row { gap: 7px; }
+      .lw-pts { font-size: 13px; }
+      .heat-team :global(.mchip) { max-width: 128px; }
+      .heat-cell span { width: 28px; height: 24px; }
+    }
   </style>
 </Base>

@@ -72,6 +72,7 @@ img { max-width: 100%; display: block; }
 .section { padding: 56px 0; }
 .section-sm { padding: 34px 0; }
 .grid { display: grid; gap: 18px; }
+.grid > * { min-width: 0; }
 .cols-2 { grid-template-columns: repeat(2, 1fr); }
 .cols-3 { grid-template-columns: repeat(3, 1fr); }
 .cols-4 { grid-template-columns: repeat(4, 1fr); }
