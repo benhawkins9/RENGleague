@@ -5,8 +5,14 @@ name: Weekly VP Update
 # the refreshed data, and pushes — which triggers a Vercel production redeploy.
 on:
   schedule:
-    # 13:00 UTC ≈ 8am ET, Tuesdays, Sep–Jan (covers reg season wks 1-14 + playoffs)
-    - cron: "0 13 * 9-12,1 2"
+    # Tuesdays ~8:15am Central, after MNF finalizes the prior week's scores.
+    # Two lines because GitHub cron is UTC-only and can't follow DST:
+    #   Sep-Oct (CDT, UTC-5): 13:15 UTC = 8:15am
+    #   Nov-Dec (CST, UTC-6): 14:15 UTC = 8:15am
+    # Last run = Tue Dec 29, 2026 (after NFL Week 17 = league finals).
+    # Off the top of the hour on purpose — GitHub queues :00 crons hours late.
+    - cron: "15 13 * 9-10 2"
+    - cron: "15 14 * 11-12 2"
   workflow_dispatch: {} # allow manual "Run workflow" from the Actions tab
 
 permissions:
