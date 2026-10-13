@@ -35,6 +35,33 @@ const name = (r) => r.teamName.trim();
 const f2 = (n) => n.toFixed(2);
 const thisWeek = (r) => r.weekly.find((w) => w.week === wk);
 
+// Season-level notes that only show up when they're actually true this week.
+function standouts() {
+  const out = [];
+  const upTo = (r, n) => r.weekly.filter((w) => w.week <= n);
+  const sum = (ws, k) => ws.reduce((s, w) => s + (w[k] || 0), 0);
+  const rankAt = (n) => [...st].sort((a, b) => (sum(upTo(b, n), "vp") - sum(upTo(a, n), "vp")) || (sum(upTo(b, n), "points") - sum(upTo(a, n), "points")));
+  if (wk >= 2) {
+    const prev = rankAt(wk - 1).map((r) => r.managerId);
+    const prevIn = new Set(prev.slice(0, 6)), nowIn = new Set(st.slice(0, 6).map((r) => r.managerId));
+    const entered = st.filter((r) => nowIn.has(r.managerId) && !prevIn.has(r.managerId)).map(name);
+    const dropped = st.filter((r) => prevIn.has(r.managerId) && !nowIn.has(r.managerId)).map(name);
+    if (entered.length) out.push(`📈 Into the top 6: ${entered.join(", ")}`);
+    if (dropped.length) out.push(`📉 Fell below the playoff line: ${dropped.join(", ")}`);
+    const jumps = st.map((r, i) => ({ r, d: prev.indexOf(r.managerId) - i })).filter((x) => Math.abs(x.d) >= 3);
+    jumps.forEach((x) => out.push(`${x.d > 0 ? "🚀" : "🪂"} ${name(x.r)} ${x.d > 0 ? "up" : "down"} ${Math.abs(x.d)} spots to #${st.indexOf(x.r) + 1}`));
+  }
+  if (wk >= 3) {
+    const streak = (r) => { const ws = upTo(r, wk).sort((a, b) => b.week - a.week); const k = ws[0]?.result; let n = 0; for (const w of ws) { if (w.result !== k) break; n++; } return { k, n }; };
+    st.forEach((r) => {
+      const s = streak(r);
+      if (s.n === wk) out.push(s.k === "W" ? `🛡️ Still unbeaten: ${name(r)} (${r.w}-0)` : `🫠 Still looking for a win: ${name(r)} (0-${r.l})`);
+      else if (s.n >= 4) out.push(s.k === "W" ? `🔥 ${name(r)} has won ${s.n} straight` : `❄️ ${name(r)} has lost ${s.n} straight`);
+    });
+  }
+  return out;
+}
+
 // ---------- text summary ----------
 function buildText() {
   if (!CAPTION && IMAGE && !NOTES) return "";
@@ -67,10 +94,11 @@ function buildText() {
     lines.push(`🔥 High score: ${name(high.r)} ${f2(high.w.points)}`);
     if (perfect.length) lines.push(`💯 Perfect week (4 VP): ${perfect.join(", ")}`);
     if (robbed.length) lines.push(`🤕 Top-4 score but lost: ${robbed.join(", ")}`);
-    if (blow) lines.push(`🧨 Blowout: ${name(blow.win.r)} over ${name(blow.lose.r)} by ${f2(blow.margin)}`);
-    if (close && close !== blow) lines.push(`😬 Closest: ${name(close.win.r)} over ${name(close.lose.r)} by ${f2(close.margin)}`);
-    if (benchPts >= 20) lines.push(`🪑 Left on bench: ${name(bench.r)} ${f2(benchPts)}`);
+    if (blow && blow.margin >= 40) lines.push(`🧨 Blowout: ${name(blow.win.r)} over ${name(blow.lose.r)} by ${f2(blow.margin)}`);
+    if (close && close !== blow && close.margin <= 10) lines.push(`😬 Nail-biter: ${name(close.win.r)} over ${name(close.lose.r)} by ${f2(close.margin)}`);
+    if (benchPts >= 25) lines.push(`🪑 Left on bench: ${name(bench.r)} ${f2(benchPts)}`);
     lines.push(`🧊 Low score: ${name(low.r)} ${f2(low.w.points)}`);
+    lines.push(...standouts());
   }
   if (NOTES || !IMAGE) lines.push("", "Full table, all-play & luck: rengleague.com/live");
   return lines.join("\n");
@@ -152,6 +180,13 @@ async function postMessage(text, file) {
 }
 
 // ---------- main ----------
+// --once (scheduled weekly run): skip if this week was already posted or the regular season is over.
+const lastPath = join(OUT_DIR, "last-posted.json");
+const lastWk = existsSync(lastPath) ? JSON.parse(readFileSync(lastPath, "utf8"))[season] || 0 : 0;
+if (args.has("--once") && (wk <= lastWk || wk > (S.regSeasonWeeks || 14))) {
+  console.log(`--once: Week ${wk} ${wk <= lastWk ? "already posted" : "is past the regular season"} — skipping.`);
+  process.exit(0);
+}
 const text = buildText();
 const png = IMAGE ? renderPng() : null;
 console.log(`--- ${season} Week ${wk} post ${POST ? "(POSTING)" : "(dry run)"} ---\n${text}\n---`);
@@ -163,3 +198,5 @@ const file = png ? await uploadPng(png) : null;
 if (file) console.log(`uploaded file_id ${file.file_id} -> ${file.url}`);
 const m = await postMessage(text, file);
 console.log(`POSTED message ${m.message_id} as ${m.author_display_name} at ${new Date(+m.created).toISOString()}`);
+const posted = existsSync(lastPath) ? JSON.parse(readFileSync(lastPath, "utf8")) : {};
+writeFileSync(lastPath, JSON.stringify({ ...posted, [season]: wk }, null, 2));
