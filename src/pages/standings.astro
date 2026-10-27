@@ -7,8 +7,10 @@ import { meta, seasons, completedSeasons, managerColor, fmt, pct, signed, record
 
 const liveSeason = meta.upcomingSeason;
 const liveWeeks = liveSeason ? (seasons[liveSeason]?.weeksPlayed || 0) : 0;
+// once Week 1 is final, the in-progress season leads the tabs (and is the default)
+const hasLive = liveWeeks > 0 && !completedSeasons.includes(liveSeason);
 
-const order = [...completedSeasons].reverse();
+const order = [...(hasLive ? [liveSeason] : []), ...[...completedSeasons].reverse()];
 const defaultSeason = order[0];
 
 function highlights(s) {
@@ -19,6 +21,7 @@ function highlights(s) {
     king: seasons[s].pointsKing,
     luckiest: [...st].sort((a, b) => b.luck - a.luck)[0],
     unluckiest: [...st].sort((a, b) => a.luck - b.luck)[0],
+    line: st[5], firstOut: st[6], // #6 seed holds the last playoff spot
   };
 }
 ---
@@ -30,28 +33,34 @@ function highlights(s) {
     sub="Seeding is set by Victory Points — +2 for the head-to-head win, plus a scoring bonus (top-4 = +2, middle-4 = +1). Max 4 VP a week."
   >
     <div class="season-tabs" role="tablist">
-      {order.map((s) => (<button class={`stab${s === defaultSeason ? " is-active" : ""}`} data-season={s}>{s}</button>))}
-      {liveSeason && (liveWeeks > 0
-        ? <span class="chip" style="margin-left:auto">{liveSeason} · through Week {liveWeeks} — <a href="/live" style="color:var(--accent)">live VP scoreboard →</a></span>
-        : <span class="chip" style="margin-left:auto">{liveSeason} · preseason — <a href="/draft" style="color:var(--accent)">see the draft →</a></span>)}
+      {order.map((s) => (<button class={`stab${s === defaultSeason ? " is-active" : ""}`} data-season={s}>{s}{hasLive && s === liveSeason && <span class="stab-live">Wk {liveWeeks}</span>}</button>))}
+      {liveSeason && !hasLive && <span class="chip" style="margin-left:auto">{liveSeason} · preseason — <a href="/draft" style="color:var(--accent)">see the draft →</a></span>}
     </div>
   </PageHeader>
 
   {order.map((s) => {
     const st = seasons[s].standings;
     const h = highlights(s);
+    const live = hasLive && s === liveSeason;
+    const lineGap = live ? h.line.vp - h.firstOut.vp : 0;
     return (
       <section class="season-panel" data-season={s} style={s === defaultSeason ? "" : "display:none"}>
         <div class="wrap">
           <div class="grid cols-4" style="margin-bottom:20px">
-            <StatCard label="🏆 Champion" value="🏆" accent="gold"
-              info="Winner of the 2-week cumulative-score final — not necessarily the top seed."
-              sub={`${h.champ.teamName} · #${h.champ.seed} seed → ${fmt(h.champ.total)} finals pts`} />
+            {live ? (
+              <StatCard label="✂️ Playoff line" value={h.line.vp} unit="VP" accent="gold"
+                info="Top 6 by VP make the playoffs (PF breaks VP ties). This is what the #6 seed has right now."
+                sub={`${h.line.teamName} holds #6 · ${h.firstOut.teamName} ${lineGap ? `${lineGap} VP back` : "level on VP"}`} />
+            ) : (
+              <StatCard label="🏆 Champion" value="🏆" accent="gold"
+                info="Winner of the 2-week cumulative-score final — not necessarily the top seed."
+                sub={`${h.champ.teamName} · #${h.champ.seed} seed → ${fmt(h.champ.total)} finals pts`} />
+            )}
             <StatCard label="VP #1 Seed" value={h.seed1.vp} unit="VP" accent="accent" icon="🥇"
               info="Victory Points: +2 for the weekly H2H win, plus a scoring bonus (top-4 +2, middle-4 +1). Most VP earns the #1 seed and a bye."
-              sub={`${h.seed1.teamName} · earned the bye`} />
-            <StatCard label="Points King" value={fmt(h.king.pf)} accent="blue" icon="📈"
-              info="Most total points scored across the 14-week regular season." sub={h.king.teamName} />
+              sub={`${h.seed1.teamName} · ${live ? "holds the top seed" : "earned the bye"}`} />
+            <StatCard label={live ? "Points leader" : "Points King"} value={fmt(h.king.pf)} accent="blue" icon="📈"
+              info={live ? `Most total points scored so far (Weeks 1–${liveWeeks}).` : "Most total points scored across the 14-week regular season."} sub={h.king.teamName} />
             <StatCard label="Most snakebit" value={signed(h.unluckiest.luck)} accent="hot" icon="🐍"
               info="Luck = actual wins minus expected wins (from all-play). Most negative = deserved more wins than the schedule gave them."
               sub={`${h.unluckiest.teamName} · ${record(h.unluckiest.w, h.unluckiest.l)} on a ${h.unluckiest.allPlayW}-${h.unluckiest.allPlayL} all-play`} />
@@ -102,12 +111,21 @@ function highlights(s) {
                 </tbody>
               </table>
             </div>
-            <div class="po-key">
-              <span><span class="dot bye"></span> Seeds 1–2 — first-round bye</span>
-              <span><span class="dot po"></span> Seeds 3–6 — Week-15 shootout (top 2 advance)</span>
-              <span><span class="dot out"></span> Seeds 7–12 — eliminated</span>
-              <a href="/hall" style="margin-left:auto;color:var(--accent)">See the playoff bracket →</a>
-            </div>
+            {live ? (
+              <div class="po-key">
+                <span><span class="dot bye"></span> Seeds 1–2 — bye if it ended today</span>
+                <span><span class="dot po"></span> Seeds 3–6 — in the Week-15 shootout</span>
+                <span><span class="dot out"></span> Seeds 7–12 — on the outside</span>
+                <a href="/live" style="margin-left:auto;color:var(--accent)">Week {liveWeeks} results & the race →</a>
+              </div>
+            ) : (
+              <div class="po-key">
+                <span><span class="dot bye"></span> Seeds 1–2 — first-round bye</span>
+                <span><span class="dot po"></span> Seeds 3–6 — Week-15 shootout (top 2 advance)</span>
+                <span><span class="dot out"></span> Seeds 7–12 — eliminated</span>
+                <a href="/hall" style="margin-left:auto;color:var(--accent)">See the playoff bracket →</a>
+              </div>
+            )}
           </div>
 
           <div class="grid cols-2" style="margin-top:20px">
@@ -155,6 +173,9 @@ function highlights(s) {
     .stab { font-family: var(--display); font-weight: 600; font-size: 15px; padding: 7px 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); cursor: pointer; transition: all .15s; }
     .stab:hover { color: var(--text); }
     .stab.is-active { background: var(--accent); color: #04221a; border-color: transparent; }
+    .stab-live { margin-left: 7px; font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+    .stab-live::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; margin-right: 5px; vertical-align: 1px; }
+    .stab:not(.is-active) .stab-live::before { background: var(--accent); }
     .season-panel { padding: 8px 0 40px; }
 
     .seedcell { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; padding-left: 8px; border-left: 3px solid transparent; }

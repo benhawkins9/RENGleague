@@ -2,20 +2,72 @@
 import Base from "../layouts/Base.astro";
 import PageHeader from "../components/PageHeader.astro";
 import ManagerChip from "../components/ManagerChip.astro";
-import { meta, seasons, managers, managerColor, fmt, signed, record } from "../lib/data.js";
+import { meta, seasons, managers, headToHead, managerColor, fmt, signed, record } from "../lib/data.js";
 
+// /live = "this week": where the race stands, what just happened, what's next.
+// The full cumulative table (all-play, luck, efficiency, power) lives on /standings.
 const liveSeason = meta.upcomingSeason || meta.completedSeasons[meta.completedSeasons.length - 1];
 const s = seasons[liveSeason] || { standings: [] };
 const standings = s.standings || [];
 const played = standings.length > 0 && (standings[0].weekly?.length || 0) > 0;
 const weeks = played ? standings[0].weekly.map((w) => w.week) : [];
 const lastWeek = weeks[weeks.length - 1];
-
-const lastWeekRows = played
-  ? standings.map((r) => ({ managerId: r.managerId, teamName: r.teamName, ...(r.weekly.find((x) => x.week === lastWeek) || {}) })).sort((a, b) => b.points - a.points)
-  : [];
+const weeksLeft = Math.max(0, (s.regSeasonWeeks || 14) - (lastWeek || 0));
 
 const vpColor = (vp) => (vp === 4 ? "var(--gold)" : vp === 3 ? "var(--accent)" : vp === 2 ? "var(--accent-2)" : vp === 1 ? "var(--muted)" : "var(--panel-3)");
+// tinted pill/cell for a VP value (color-mix, since a hex-alpha suffix can't be appended to a CSS var); zero stays legible
+const tint = (vp) => `background:color-mix(in srgb, ${vpColor(vp)} 14%, transparent);color:${vp ? vpColor(vp) : "var(--faint)"}`;
+const team =Object.fromEntries(standings.map((r) => [r.managerId, r]));
+const wkOf = (r, wk) => r.weekly.find((x) => x.week === wk);
+
+// ---- the race: seed movement since last week + VP vs the playoff line ----
+const vpThru = (r, n) => r.weekly.reduce((a, w) => a + (w.week <= n ? w.vp : 0), 0);
+const ptsThru = (r, n) => r.weekly.reduce((a, w) => a + (w.week <= n ? w.points : 0), 0);
+const prevSeed = {};
+if (weeks.length >= 2)
+  [...standings] // same VP → PF sort as compute.mjs, one week back
+    .sort((a, b) => vpThru(b, lastWeek - 1) - vpThru(a, lastWeek - 1) || ptsThru(b, lastWeek - 1) - ptsThru(a, lastWeek - 1))
+    .forEach((r, i) => (prevSeed[r.managerId] = i + 1));
+const lineVP = standings[5]?.vp ?? 0, firstOutVP = standings[6]?.vp ?? 0;
+const race = standings.map((r) => ({
+  ...r,
+  move: prevSeed[r.managerId] ? prevSeed[r.managerId] - r.seed : 0,
+  vsLine: r.seed <= 6 ? r.vp - firstOutVP : r.vp - lineVP, // seeds 1-6: cushion over #7 · seeds 7-12: VP back of #6
+  wk: wkOf(r, lastWeek),
+}));
+
+// ---- last week's results, paired by opponent id (walks seed order, so the #1 seed's game comes first) ----
+const wkRank = Object.fromEntries([...standings]
+  .sort((a, b) => (wkOf(b, lastWeek)?.points ?? 0) - (wkOf(a, lastWeek)?.points ?? 0))
+  .map((r, i) => [r.managerId, i + 1]));
+const results = [];
+const seen = new Set();
+for (const r of standings) {
+  const w = wkOf(r, lastWeek), o = team[w?.opp];
+  if (!w || !o || seen.has(r.managerId)) continue;
+  seen.add(r.managerId).add(o.managerId);
+  const sides = [{ r, w }, { r: o, w: wkOf(o, lastWeek) }].sort((a, b) => b.w.points - a.w.points);
+  results.push({ sides, margin: sides[0].w.points - sides[1].w.points, tie: w.result === "T" });
+}
+const gameTag = (g) => (g.tie ? null : g.margin >= 40 ? "🧨 Blowout" : g.margin <= 10 ? "😬 Nail-biter" : null);
+
+// ---- up next: the coming week's slate (from compute.mjs upNext), with stakes + the all-time series ----
+const slate = (s.upNext?.games || [])
+  .map(([a, b]) => [team[a], team[b]].sort((x, y) => (x?.seed ?? 99) - (y?.seed ?? 99)))
+  .filter(([a, b]) => a && b)
+  .sort((x, y) => x[0].seed - y[0].seed);
+const stakes = ([a, b]) =>
+  b.seed <= 4 ? { t: "👑 Heavyweights", c: "gold" }
+  : a.seed >= 5 && b.seed <= 8 ? { t: "✂️ Bubble battle", c: "blue" }
+  : a.seed >= 10 ? { t: "🧹 Basement bowl", c: "hot" }
+  : null;
+const series = (a, b) => {
+  const h = headToHead.find((x) => (x.a === a.managerId && x.b === b.managerId) || (x.a === b.managerId && x.b === a.managerId));
+  if (!h?.games) return "First-ever meeting";
+  const aw = h.a === a.managerId ? h.aWins : h.bWins, bw = h.a === a.managerId ? h.bWins : h.aWins;
+  const ties = h.ties ? `-${h.ties}` : "";
+  return aw === bw ? `All-time series tied ${aw}-${bw}${ties}` : `All-time: ${(aw > bw ? a : b).teamName} leads ${Math.max(aw, bw)}-${Math.min(aw, bw)}${ties}`;
+};
 
 // preseason: list the entrants for the live season
 const entrants = managers
@@ -31,30 +83,41 @@ const rules = [
 ];
 ---
 
-<Base active="live" title="Live Scoreboard" description={`Live ${liveSeason} Victory Points standings, updated weekly.`}>
+<Base active="live" title="Live Scoreboard" description={`The ${liveSeason} week in Victory Points: results, the playoff race and next week's slate.`}>
   {played ? (
     <>
-      <PageHeader eyebrow={`${liveSeason} Season · live`} title="VP Scoreboard"
-        sub={`Through Week ${lastWeek}. Recomputed from Sleeper every Tuesday during the season.`}>
-        <span class="chip accent" style="margin-top:14px">● Live · updated weekly</span>
+      <PageHeader eyebrow={`${liveSeason} Season · live`} title={`Week ${lastWeek} Scoreboard`}
+        sub={weeksLeft
+          ? `Week ${lastWeek} is final — ${weeksLeft} regular-season week${weeksLeft === 1 ? "" : "s"} left. Recomputed from Sleeper every Tuesday.`
+          : `The ${s.regSeasonWeeks || 14}-week regular season is final — seeding is set.`}>
+        <div class="row wrap-gap" style="margin-top:14px;gap:8px">
+          <span class="chip accent">● Live · updated weekly</span>
+          <a href="/standings" class="chip">Full table · all-play · luck →</a>
+        </div>
       </PageHeader>
 
       <section class="section-sm">
         <div class="wrap grid cols-2">
-          <!-- live standings -->
+          <!-- the race -->
           <div class="panel" style="overflow:hidden">
-            <div class="panel-pad" style="padding-bottom:6px"><h3 style="font-size:16px">📊 Live VP Standings</h3></div>
+            <div class="panel-pad" style="padding-bottom:6px">
+              <h3 style="font-size:16px">🏁 The Playoff Race</h3>
+              <p class="dim" style="font-size:12px;margin:4px 0 0">Top 6 make it, top 2 get the bye. <b>Line</b> = VP clear of #7 (seeds 1–6) or back of #6 (seeds 7–12). Arrows = moves since Week {lastWeek - 1}.</p>
+            </div>
             <div style="overflow-x:auto">
-              <table class="tbl">
-                <thead><tr><th>#</th><th>Team</th><th class="td-num">VP</th><th class="td-num">Rec</th><th class="td-num">PF</th></tr></thead>
+              <table class="tbl race">
+                <thead><tr><th>#</th><th>Team</th><th class="td-num">VP</th><th class="td-num">Rec</th><th class="td-num" title="VP clear of the first team out (seeds 1–6) or back of the #6 seed (seeds 7–12)">Line</th><th class="td-num">Wk {lastWeek}</th></tr></thead>
                 <tbody>
-                  {standings.map((r) => (
+                  {race.map((r) => (
                     <tr class={r.seed === 6 ? "cut" : ""}>
-                      <td class="num" style={r.seed <= 2 ? "color:var(--gold);font-weight:700" : r.seed <= 6 ? "font-weight:600" : "color:var(--faint)"}>{r.seed}</td>
+                      <td class="num seed-td" style={r.seed <= 2 ? "color:var(--gold);font-weight:700" : r.seed <= 6 ? "font-weight:600" : "color:var(--faint)"}>
+                        {r.seed}{r.move !== 0 && <span class={`mv ${r.move > 0 ? "up" : "down"}`} title={`Was #${r.seed + r.move} after Week ${lastWeek - 1}`}>{r.move > 0 ? "▲" : "▼"}{Math.abs(r.move)}</span>}
+                      </td>
                       <td><ManagerChip id={r.managerId} name={r.teamName} size={26} /></td>
                       <td class="td-num num" style="font-weight:700;color:var(--accent)">{r.vp}</td>
                       <td class="td-num num">{record(r.w, r.l, r.t)}</td>
-                      <td class="td-num">{fmt(r.pf)}</td>
+                      <td class={`td-num num ${r.vsLine > 0 ? "pos" : r.vsLine < 0 ? "neg" : "dim"}`} style="font-weight:600">{signed(r.vsLine, 0)}</td>
+                      <td class="td-num">{r.wk && <span class="lw-vp num" style={tint(r.wk.vp)} title={`Wk ${lastWeek}: ${fmt(r.wk.points, 2)} pts · ${r.wk.result}`}>+{r.wk.vp}</span>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -62,21 +125,52 @@ const rules = [
             </div>
           </div>
 
-          <!-- last week -->
+          <!-- last week's results -->
           <div class="panel panel-pad">
-            <h3 style="font-size:16px;margin-bottom:4px">🗓️ Week {lastWeek} VP Earned</h3>
-            <p class="dim" style="font-size:12px;margin:0 0 12px">Points · scoring tier + H2H = VP that week</p>
-            {lastWeekRows.map((r, i) => (
-              <div class="lw-row">
-                <span class="num lw-rank">{i + 1}</span>
-                <div style="flex:1;min-width:0"><ManagerChip id={r.managerId} name={r.teamName} size={24} /></div>
-                <span class="num lw-pts">{fmt(r.points)}</span>
-                <span class="lw-vp num" style={`background:${vpColor(r.vp)}22;color:${vpColor(r.vp)}`}>{r.vp} VP</span>
-              </div>
-            ))}
+            <h3 style="font-size:16px;margin-bottom:4px">🥊 Week {lastWeek} Results</h3>
+            <p class="dim" style="font-size:12px;margin:0 0 12px">Chip = VP earned: +2 for the win, plus the scoring bonus (top-4 +2, middle-4 +1).</p>
+            <div class="games">
+              {results.map((g) => (
+                <div class="game">
+                  {g.sides.map((x, i) => (
+                    <div class={`g-row${i === 0 && !g.tie ? " is-win" : ""}`}>
+                      <div class="g-team"><ManagerChip id={x.r.managerId} name={x.r.teamName} size={24} /></div>
+                      <span class="num g-pts">{fmt(x.w.points, 2)}</span>
+                      <span class="lw-vp num" style={tint(x.w.vp)} title={`H2H +${x.w.h2hVP} · scoring +${x.w.scoreVP} (#${wkRank[x.r.managerId]} of ${standings.length} in points)`}>+{x.w.vp}</span>
+                    </div>
+                  ))}
+                  <div class="g-foot">{g.tie ? "Tie" : `by ${fmt(g.margin, 2)}`}{gameTag(g) && ` · ${gameTag(g)}`}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
+
+      {slate.length > 0 && (
+        <section class="section-sm">
+          <div class="wrap">
+            <div class="row between wrap-gap" style="margin-bottom:14px">
+              <h3 style="font-size:17px">📅 Up Next · Week {s.upNext.week}</h3>
+              <span class="dim" style="font-size:12px">Seed · record · VP going in</span>
+            </div>
+            <div class="grid cols-3">
+              {slate.map((pair) => {
+                const tag = stakes(pair);
+                return (
+                  <div class="slate">
+                    {tag && <span class={`chip ${tag.c} sl-tag`}>{tag.t}</span>}
+                    <ManagerChip id={pair[0].managerId} name={pair[0].teamName} size={30} sub={`#${pair[0].seed} · ${record(pair[0].w, pair[0].l, pair[0].t)} · ${pair[0].vp} VP`} />
+                    <span class="sl-vs">vs</span>
+                    <ManagerChip id={pair[1].managerId} name={pair[1].teamName} size={30} sub={`#${pair[1].seed} · ${record(pair[1].w, pair[1].l, pair[1].t)} · ${pair[1].vp} VP`} />
+                    <div class="sl-foot">{series(pair[0], pair[1])}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
 
       <!-- weekly VP matrix -->
       <section class="section-sm">
@@ -93,7 +187,7 @@ const rules = [
                       <td class="heat-team"><ManagerChip id={r.managerId} name={r.teamName} size={22} /></td>
                       {weeks.map((wk) => {
                         const w = r.weekly.find((x) => x.week === wk);
-                        return <td class="heat-cell"><span class="num" style={`background:${vpColor(w?.vp ?? 0)}22;color:${vpColor(w?.vp ?? 0)}`} title={`Wk ${wk}: ${w ? fmt(w.points) + " pts · " + w.result : "—"}`}>{w?.vp ?? "·"}</span></td>;
+                        return <td class="heat-cell"><span class="num" style={tint(w?.vp ?? 0)} title={`Wk ${wk}: ${w ? fmt(w.points) + " pts · " + w.result : "—"}`}>{w?.vp ?? "·"}</span></td>;
                       })}
                       <td class="num" style="font-weight:700;color:var(--accent)">{r.vp}</td>
                     </tr>
@@ -139,11 +233,25 @@ const rules = [
 
   <style>
     tr.cut td { border-bottom: 2px solid var(--line-2); }
-    .lw-row { display: flex; align-items: center; gap: 9px; padding: 6px 0; border-bottom: 1px solid var(--line); }
-    .lw-row:last-child { border: none; }
-    .lw-rank { color: var(--faint); font-weight: 700; width: 16px; font-size: 12px; }
-    .lw-pts { font-weight: 700; font-size: 14px; }
-    .lw-vp { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 999px; }
+    .seed-td { white-space: nowrap; }
+    .mv { font-size: 9.5px; font-weight: 700; margin-left: 4px; vertical-align: 1px; }
+    .mv.up { color: var(--accent); }
+    .mv.down { color: var(--hot); }
+    .lw-vp { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
+
+    .games { display: flex; flex-direction: column; gap: 10px; }
+    .game { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 12px 6px; background: var(--bg-2); }
+    .g-row { display: flex; align-items: center; gap: 9px; padding: 3px 0; }
+    .g-team { flex: 1; min-width: 0; }
+    .g-pts { font-size: 14px; font-weight: 600; color: var(--muted); }
+    .g-row.is-win .g-pts { color: var(--text); font-weight: 700; }
+    .g-foot { font-size: 11px; color: var(--faint); text-align: right; margin-top: 1px; }
+
+    .slate { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 14px 16px; background: linear-gradient(180deg, var(--panel), var(--bg-2)); border: 1px solid var(--line); border-radius: var(--radius); }
+    .sl-tag { font-size: 11px; padding: 2px 9px; }
+    .sl-vs { font-family: var(--display); font-size: 10.5px; font-weight: 700; color: var(--faint); letter-spacing: .12em; text-transform: uppercase; padding-left: 39px; }
+    .sl-foot { align-self: stretch; font-size: 11.5px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 8px; margin-top: 2px; }
+
     .heat { border-collapse: collapse; font-size: 13px; }
     .heat th { font-family: var(--display); color: var(--muted); font-size: 11px; padding: 4px 6px; text-align: center; }
     .heat th:first-child { text-align: left; }
@@ -167,8 +275,9 @@ const rules = [
       .tbl :global(.td-num) { white-space: nowrap; }
       .tbl :global(td:nth-child(2)) { max-width: 0; width: 100%; } /* team column absorbs leftover width, name ellipsizes */
       .tbl :global(.mchip) { max-width: 100%; }
-      .lw-row { gap: 7px; }
-      .lw-pts { font-size: 13px; }
+      .race :global(th:nth-child(6)), .race :global(td:nth-child(6)) { display: none; } /* weekly VP is in the results cards below */
+      .race :global(th:nth-child(5)), .race :global(td:nth-child(5)) { padding-right: 12px; }
+      .g-pts { font-size: 13px; }
       .heat-team :global(.mchip) { max-width: 128px; }
       .heat-cell span { width: 28px; height: 24px; }
     }

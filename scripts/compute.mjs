@@ -197,6 +197,7 @@ for (const season of SEASONS) {
       const ap = a.points || 0, bp = b.points || 0;
       A.pa += bp; B.pa += ap;
       const wkA = A.weekly[A.weekly.length - 1], wkB = B.weekly[B.weekly.length - 1];
+      wkA.opp = B.managerId; wkB.opp = A.managerId;
       wkA.oppPoints = round(bp); wkB.oppPoints = round(ap);
       let hvA = 0, hvB = 0;
       if (ap > bp) { A.w++; B.l++; wkA.result = "W"; wkB.result = "L"; hvA = 2; }
@@ -398,6 +399,14 @@ for (const season of SEASONS) {
     }
   }
 
+  // next regular-season week's pairings (Sleeper publishes the whole schedule up front) — the /live "up next" slate
+  const nextWeek = (regWeeks[regWeeks.length - 1] || 0) + 1;
+  const nextPairs = {};
+  if (!isComplete && nextWeek <= REG_WEEKS)
+    for (const t of matchups[nextWeek] || []) if (t.roster_id in T && t.matchup_id != null) (nextPairs[t.matchup_id] ||= []).push(T[t.roster_id].managerId);
+  const nextGames = Object.values(nextPairs).filter((g) => g.length === 2);
+  const upNext = nextGames.length ? { week: nextWeek, games: nextGames } : null;
+
   // strip heavy allWeekPoints from standings before output (only needed during compute)
   const standingsOut = standings.map(({ allWeekPoints, ...r }) => r);
 
@@ -405,7 +414,7 @@ for (const season of SEASONS) {
     season, leagueId: league.league_id, name: league.name, status: league.status,
     weeksPlayed: regWeeks.length, isComplete,
     regSeasonWeeks: REG_WEEKS,
-    standings: standingsOut, power, playoffs, champion, runnerUp,
+    standings: standingsOut, power, playoffs, champion, runnerUp, upNext,
     pointsKing: pointsKing ? { managerId: pointsKing.managerId, teamName: pointsKing.teamName, pf: pointsKing.pf } : null,
     draftType: drafts[0]?.type || null, auctionBudget: drafts[0]?.settings?.budget || null,
     draftBoard, transactions: { total: txAll.length, trades: tradeCount },

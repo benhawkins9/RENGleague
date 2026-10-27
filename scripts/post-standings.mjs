@@ -100,7 +100,7 @@ function buildText() {
     lines.push(`🧊 Low score: ${name(low.r)} ${f2(low.w.points)}`);
     lines.push(...standouts());
   }
-  if (NOTES || !IMAGE) lines.push("", "Full table, all-play & luck: rengleague.com/live");
+  if (NOTES || !IMAGE) lines.push("", "Full table, all-play & luck: rengleague.com/standings");
   return lines.join("\n");
 }
 
